@@ -40,6 +40,7 @@ $fs = min(layer_height/2, xspace(1)/2);
 inch = 25.4;
 card = [2.5*inch, 3.5*inch];  // standard playing card dimensions
 
+// seams add about 1/2mm to each dimension
 sand_sleeve = [81, 122];  // Dixit
 orange_sleeve = [73, 122];  // Tarot
 magenta_sleeve = [72, 112];  // Scythe
@@ -81,7 +82,7 @@ module interior(a=45, center=false) {
     translate(origin) rotate(a) cube(interior, center=true);
 }
 
-module focus_rail(half=0, center=false) {
+module focus_frame(half=0, center=false) {
     axis = sign(half);
     focus6 = [371, 11.5, 21.5];
     focus5 = [309, 9, 22];
@@ -92,6 +93,9 @@ module focus_rail(half=0, center=false) {
         max(slot5[1], slot6[1]) + 2*wall0,
         slot5[2] + floor0,
     ];
+    echo(block);
+    echo(block[0]/2-96*1.5);
+    echo(block[1]+21*2);
 
     origin = [0, 0, center ? 0 : block[2]/2];
     module cut(slot, block) {
@@ -140,6 +144,51 @@ module focus_rail(half=0, center=false) {
     }
 }
 
-%interior();
-focus_rail(+1);
-focus_rail(-1);
+module raise(z=floor0) {
+    translate([0, 0, z]) children();
+}
+
+module deck_box(center=false) {
+    cards = [green_sleeve[0]+0.5, green_sleeve[1]+0.5, 16];
+    block = [
+        ceil(cards[1]+1+2*wall0),
+        ceil(cards[2]+1+2*wall0),
+        ceil(cards[0]+1+floor0),
+    ];
+    origin = center ? [0, 0, 0] : block/2;
+    module vee(depth, block) {
+        x = block[0]/2 - wall0;
+        vee = [
+            [-x*2/3, 0],
+            [-x/3, depth+floor0-block[2]],
+            [+x/3, depth+floor0-block[2]],
+            [+x*2/3, 0],
+            [+x, 0],
+            [+x, 1],
+            [-x, 1],
+            [-x, 0],
+        ];
+        translate([0, 0, block[2]/2]) rotate([90, 0, 0])
+            linear_extrude(2*block[1], center=true) polygon(vee);
+    }
+    module shell(block) {
+        well = block - [2*wall0, 2*wall0, 0];
+        difference() {
+            cube(block, center=true);
+            raise() cube(well, center=true);
+            vee(30, block);
+        }
+    }
+    translate(origin) {
+        shell(block);
+        %raise() raise(cards[0]/2-block[2]/2)
+            rotate([0, 90, 90]) cube(cards, center=true);
+    }
+}
+
+union() {
+    %interior();
+    rotate(180) focus_frame();
+    for (x=[-144-gap0, -48, 48+gap0]) for (y=[-58, -37+gap0])
+        translate([x, y, 0]) deck_box();
+}
