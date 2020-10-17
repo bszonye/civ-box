@@ -201,9 +201,17 @@ module map_tile(n=1, center=false) {
     linear_extrude(board*n, center=center) map_tile_poly();
 }
 
+module map_tile_lid(slope=0, center=false) {
+    // TODO
+    // top lids need no slope
+    // bottom (nesting) lids need a 30-45 degree slope for printability
+}
+
 module map_tile_box(n=1, center=false) {
+    // TODO: leave room for lid
     h = ceil(board * (n + 3/4) + floor0);
     origin = center ? [0, 0] : [1, 1] * (1+wall0);
+    // TODO: stick a lid on the bottom to make these stackable
     translate(origin) {
         difference() {
             linear_extrude(h, center=center)
