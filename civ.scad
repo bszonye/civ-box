@@ -204,13 +204,15 @@ module map_tile(n=1, center=false) {
 module map_tile_box(n=1, center=false) {
     h = ceil(board * (n + 3/4) + floor0);
     origin = center ? [0, 0] : [1, 1] * (1+wall0);
-    translate(origin) difference() {
-        linear_extrude(h, center=center)
-            offset(r=1+wall0) map_tile_poly(center);
-        raise() linear_extrude(h, center=center)
-            offset(r=1) map_tile_poly(center);
+    translate(origin) {
+        difference() {
+            linear_extrude(h, center=center)
+                offset(r=1+wall0) map_tile_poly(center);
+            raise() linear_extrude(h, center=center)
+                offset(r=1) map_tile_poly(center);
+        }
+        %raise() map_tile(n);
     }
-    %raise() map_tile(n);
 }
 
 union() {
