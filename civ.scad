@@ -93,9 +93,6 @@ module focus_frame(half=0, center=false) {
         max(slot5[1], slot6[1]) + 2*wall0,
         slot5[2] + floor0,
     ];
-    echo(block);
-    echo(block[0]/2-96*1.5);
-    echo(block[1]+21*2);
 
     origin = [0, 0, center ? 0 : block[2]/2];
     module cut(slot, block) {
@@ -186,9 +183,44 @@ module deck_box(center=false) {
     }
 }
 
+board = 2.25;
+Rhex = 3/4 * 25.4;  // center to vertex
+function hex_grid(x, y) = [Rhex*x, sin(60)*Rhex*y];
+module map_tile_poly(center=false) {
+    grid = [
+        [2, 0], [2.5, 1], [2, 2], [1, 2], [0.5, 3], [-0.5, 3],
+        [-1, 2], [-2, 2], [-2.5, 1], [-3.5, 1], [-4, 0], [-5, 0],
+        [-5.5, -1], [-5, -2], [-4, -2], [-3.5, -3], [-2.5, -3], [-2, -2],
+        [-1, -2], [-0.5, -3], [0.5, -3], [1, -2], [2, -2], [2.5, -1],
+    ];
+    tile = [for (i=grid) hex_grid(i[0], i[1])];
+    origin = center ? [0, 0] : hex_grid(5.5, 3);
+    translate(origin) polygon(tile);
+}
+module map_tile(n=1, center=false) {
+    linear_extrude(board*n, center=center) map_tile_poly();
+}
+
+module map_tile_box(n=1, center=false) {
+    h = ceil(board * (n + 3/4) + floor0);
+    origin = center ? [0, 0] : [1, 1] * (1+wall0);
+    translate(origin) difference() {
+        linear_extrude(h, center=center)
+            offset(r=1+wall0) map_tile_poly(center);
+        raise() linear_extrude(h, center=center)
+            offset(r=1) map_tile_poly(center);
+    }
+    %raise() map_tile(n);
+}
+
 union() {
     %interior();
     rotate(180) focus_frame();
     for (x=[-144-gap0, -48, 48+gap0]) for (y=[-58, -37+gap0])
         translate([x, y, 0]) deck_box();
+    rotate(-45)
+    translate([interior[0]/2-2-2*wall0, -interior[1]/2] - hex_grid(8, 0)) {
+        map_tile_box(16);
+        raise(40+1) map_tile_box(5);
+    }
 }
