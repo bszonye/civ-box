@@ -190,9 +190,9 @@ Hlid = 4;  // total height of lid + plug
 Rlid = 1+wall0;  // offset radius from contents to outer lid/box edge
 Rplug = 1-gap0;  // offset radius from contents to lid plug
 Alid = 30;  // angle of lid chamfer
-Dlid = Hlid - floor0;  // depth of lid below cap
-Dchamfer = (Rlid-Rplug) * tan(Alid);
-Dgap = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
+Hplug = Hlid - floor0;  // depth of lid below cap
+Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
+Hchamfer = (Rlid-Rplug) * tan(Alid);
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -221,15 +221,15 @@ module hex_lid(grid=Ghex, center=false) {
             linear_extrude(floor0, center=false)
                 hex_poly(grid=grid, center=true);
             mirror([0, 0, 1]) {
-                cylinder(h=Dlid, r=Rplug);
-                cylinder(h=Dchamfer, r1=Rlid, r2=Rplug);
+                cylinder(h=Hplug, r=Rplug);
+                cylinder(h=Hchamfer, r1=Rlid, r2=Rplug);
             }
         }
     }
 }
 module hex_box(n=1, lid=false, grid=Ghex, center=false) {
     h0 = Hboard * n + floor0;
-    h = clayer(h0 + Dlid);
+    h = clayer(h0 + Hplug);
     echo(h);
     // TODO: center z-axis
     origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
@@ -242,7 +242,7 @@ module hex_box(n=1, lid=false, grid=Ghex, center=false) {
             raise() linear_extrude(h, center=false)
                 offset(r=Rlid-wall0) hex_poly(grid=grid, center=true);
             // lid chamfer
-            raise(h+Dgap) hex_lid(grid=grid, center=true);
+            raise(h+Hseam) hex_lid(grid=grid, center=true);
         }
         // create lid bottom
         if (lid) hex_lid(grid=grid, center=true);
@@ -277,19 +277,23 @@ module map_tile_lid(center=false) {
     hex_lid(grid=Gmap, center=center);
 }
 
+module raise_lid(n=1) {
+    raise(Hlid+Hseam+n*Hboard) children();
+}
+
 union() {
     %interior();
-    rotate(180) focus_frame();
-    for (x=[-144-gap0, -48, 48+gap0]) for (y=[-58, -37+gap0])
-        translate([x, y, 0]) deck_box();
     rotate(-45)
     translate([interior[0]/2-2-2*wall0, -interior[1]/2] - hex_grid(8, 0)) {
-        map_tile_box(16);
-        raise(40+Dgap) map_tile_box(5, lid=true);
-        raise(40+Dgap+15.4+Dgap) map_tile_lid();
+        nmap = 16;
+        ncap = 5;
+        map_tile_box(nmap);
+        raise_lid(nmap) map_tile_box(ncap, lid=true);
+        raise_lid(nmap) raise_lid(ncap) map_tile_lid();
     }
-    raise(10*Hboard) map_hex_lid();
-    map_hex_box(5);
+    nfort = 5;
+    raise_lid(nfort) map_hex_lid();
+    map_hex_box(nfort);
 }
 
 *map_hex_lid(center=true);
