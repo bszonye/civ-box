@@ -227,11 +227,10 @@ module hex_lid(grid=Ghex, center=false) {
         }
     }
 }
+function hex_box_height(n=1, lid=false) =
+    clayer(Hboard * n + floor0 + Hplug) + (lid ? Hplug : 0);
 module hex_box(n=1, lid=false, grid=Ghex, center=false) {
-    h0 = Hboard * n + floor0;
-    h = clayer(h0 + Hplug);
-    echo(h);
-    // TODO: center z-axis
+    h = hex_box_height(n=n, lid=false);
     origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
     translate(origin) {
         difference() {
@@ -277,8 +276,9 @@ module map_tile_lid(center=false) {
     hex_lid(grid=Gmap, center=center);
 }
 
-module raise_lid(n=1) {
-    raise(Hlid+Hseam+n*Hboard) children();
+module raise_lid(n=1, k=1, lid=false) {
+    h = k * (hex_box_height(n) + Hseam) + (lid ? Hplug : 0);
+    raise(h) children();
 }
 
 union() {
