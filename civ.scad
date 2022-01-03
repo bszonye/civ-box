@@ -187,8 +187,9 @@ module deck_box(center=false) {
 Hboard = 2.25;  // tile & token thickness
 Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
 Hlid = 4;  // total height of lid + plug
-Rlid = 1+wall0;  // offset radius from contents to outer lid/box edge
-Rplug = 1-gap0;  // offset radius from contents to lid plug
+Rspace = 1;  // space between contents and box (sides + lid)
+Rlid = Rspace+wall0;  // offset radius from contents to outer lid/box edge
+Rplug = Rspace-gap0;  // offset radius from contents to lid plug
 Alid = 30;  // angle of lid chamfer
 Hplug = Hlid - floor0;  // depth of lid below cap
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
@@ -228,7 +229,7 @@ module hex_lid(grid=Ghex, center=false) {
     }
 }
 function hex_box_height(n=1, lid=false) =
-    clayer(Hboard * n + floor0 + Hplug) + (lid ? Hplug : 0);
+    clayer(floor0 + n*Hboard + Rspace + Hplug) + (lid ? Hplug : 0);
 module hex_box(n=1, lid=false, grid=Ghex, center=false) {
     h = hex_box_height(n=n, lid=false);
     origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
@@ -251,6 +252,7 @@ module hex_box(n=1, lid=false, grid=Ghex, center=false) {
     }
 }
 
+// TODO: fix scale for fort tiles?
 module map_hex_poly(center=false) {
     hex_poly(grid=Ghex, center=center);
 }
