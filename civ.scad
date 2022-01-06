@@ -64,7 +64,7 @@ function double_sleeve_count(d) = floor(d / (no_sleeve + double_sleeve));
 function thick_sleeve_count(d) = floor(d / (no_sleeve + thick_sleeve));
 function thin_sleeve_count(d) = floor(d / (no_sleeve + thin_sleeve));
 function unsleeved_count(d) = floor(d / no_sleeve);
-function vdeck(n=1, sleeve=double_sleeve, card=yellow_sleeve) =
+function vdeck(n=1, card=yellow_sleeve, sleeve=double_sleeve) =
     [card[0], card[1], n*(no_sleeve+sleeve)];
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
@@ -74,6 +74,23 @@ floor0 = qlayer(wall0);
 gap0 = 0.1;
 
 interior = [287, 287, 67.5];
+module box(size, wall=1, frame=false, a=0, center=false) {
+    vint = is_list(size) ? size : [size, size, size];
+    vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
+    vcut = [vint[0], vint[1], vint[2] - wall];
+    origin = center ? [0, 0, vext[2]/2 - wall] : vext/2;
+    translate(origin) rotate(a) {
+        difference() {
+            cube(vext, center=true);  // exterior
+            raise(wall/2) cube(vint, center=true);  // interior
+            raise(2*wall) cube(vcut, center=true);  // top cut
+            if (frame) {
+                for (n=[0:2]) for (i=[-1,+1])
+                    translate(2*i*unit_axis(n)*wall) cube(vcut, center=true);
+            }
+        }
+    }
+}
 
 function diag2(x, y) = sqrt(x*x + y*y);
 function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
@@ -145,55 +162,20 @@ module focus_frame(half=0, center=false) {
 module raise(z=floor0) {
     translate([0, 0, z]) children();
 }
-
-module deck_box(center=false) {
-    cards = [green_sleeve[0]+0.5, green_sleeve[1]+0.5, 16];
-    block = [
-        ceil(cards[1]+1+2*wall0),
-        ceil(cards[2]+1+2*wall0),
-        ceil(cards[0]+1+floor0),
-    ];
-    origin = center ? [0, 0, 0] : block/2;
-    module vee(depth, block) {
-        x = block[0]/2 - wall0;
-        vee = [
-            [-x*2/3, 0],
-            [-x/3, depth+floor0-block[2]],
-            [+x/3, depth+floor0-block[2]],
-            [+x*2/3, 0],
-            [+x, 0],
-            [+x, 1],
-            [-x, 1],
-            [-x, 0],
-        ];
-        translate([0, 0, block[2]/2]) rotate([90, 0, 0])
-            linear_extrude(2*block[1], center=true) polygon(vee);
-    }
-    module shell(block) {
-        well = block - [2*wall0, 2*wall0, 0];
-        difference() {
-            cube(block, center=true);
-            raise() cube(well, center=true);
-            vee(30, block);
-        }
-    }
-    translate(origin) {
-        shell(block);
-        %raise() raise(cards[0]/2-block[2]/2)
-            rotate([0, 90, 90]) cube(cards, center=true);
-    }
+module rounded_square(r, size, center=true) {
+    offset(r=r) offset(r=-r) square(size, center);
 }
 
 Hboard = 2.25;  // tile & token thickness
 Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
 Hlid = 4;  // total height of lid + plug
-Rspace = 1;  // space between contents and box (sides + lid)
-Rlid = Rspace+wall0;  // offset radius from contents to outer lid/box edge
-Rplug = Rspace-gap0;  // offset radius from contents to lid plug
+Rint = 1;  // internal corner radius (distance from contents to wall)
+Rext = Rint+wall0;  // external corner radius
+Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
 Alid = 30;  // angle of lid chamfer
 Hplug = Hlid - floor0;  // depth of lid below cap
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
-Hchamfer = (Rlid-Rplug) * tan(Alid);
+Hchamfer = (Rext-Rplug) * tan(Alid);
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -216,31 +198,31 @@ module hex_tile(n=1, grid=Ghex, center=false) {
 }
 module hex_lid(grid=Ghex, center=false) {
     xy_min = hex_min(grid);
-    origin = center ? [0, 0, 0] : [Rlid - xy_min[0], Rlid - xy_min[1], 0];
+    origin = center ? [0, 0, 0] : [Rext - xy_min[0], Rext - xy_min[1], 0];
     translate(origin) {
         minkowski() {
             linear_extrude(floor0, center=false)
                 hex_poly(grid=grid, center=true);
             mirror([0, 0, 1]) {
                 cylinder(h=Hplug, r=Rplug);
-                cylinder(h=Hchamfer, r1=Rlid, r2=Rplug);
+                cylinder(h=Hchamfer, r1=Rext, r2=Rplug);
             }
         }
     }
 }
 function hex_box_height(n=1, lid=false) =
-    clayer(floor0 + n*Hboard + Rspace + Hplug) + (lid ? Hplug : 0);
+    clayer(floor0 + n*Hboard + Rint + Hplug) + (lid ? Hplug : 0);
 module hex_box(n=1, lid=false, grid=Ghex, center=false) {
     h = hex_box_height(n=n, lid=false);
-    origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
+    origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rext;
     translate(origin) {
         difference() {
             // exterior
             linear_extrude(h, center=false)
-                offset(r=Rlid) hex_poly(grid=grid, center=true);
+                offset(r=Rext) hex_poly(grid=grid, center=true);
             // interior
             raise() linear_extrude(h, center=false)
-                offset(r=Rlid-wall0) hex_poly(grid=grid, center=true);
+                offset(r=Rext-wall0) hex_poly(grid=grid, center=true);
             // lid chamfer
             raise(h+Hseam) hex_lid(grid=grid, center=true);
         }
@@ -283,19 +265,64 @@ module raise_lid(n=1, k=1, lid=false) {
     raise(h) children();
 }
 
-union() {
-    %interior();
-    rotate(-45)
-    translate([interior[0]/2-2-2*wall0, -interior[1]/2] - hex_grid(8, 0)) {
+Vdeck = vdeck(29, green_sleeve, thick_sleeve);
+Vdbox = [  // round dimensions to even layers
+    qlayer(Vdeck[1] + 2*Rext),
+    qlayer(Vdeck[2] + 2*Rext),
+    qlayer(Vdeck[0] + Rint + floor0),
+];
+
+module deck_box(center=false) {
+    origin = center ? [0, 0, 0] : Vdbox/2;
+    module shell(block) {
+        raise((-block[2])/2) linear_extrude(block[2]/2)
+            rounded_square(Rext, [block[0], block[1]]);
+        for (a=[0,180]) rotate(a) {
+            translate([block[0]/2-2*Rext, 0])
+                linear_extrude(block[2], center=true)
+                rounded_square(Rext, [4*Rext, block[1]]);
+            vee = [
+                [0, 0],
+                [block[0]/2-Rext, 0],
+                [block[0]/2-Rext, block[2]],
+                [block[0]/3-Rext, block[2]],
+            ];
+            raise(-block[2]/2) rotate([90, 0, 0])
+                linear_extrude(block[1], center=true)
+                offset(r=Rext) offset(r=-Rext)
+                polygon(vee);
+        }
+    }
+    translate(origin) {
+        well = [Vdbox[0]-2*wall0, Vdbox[1]-2*wall0];
+        difference() {
+            shell(Vdbox);
+            raise() linear_extrude(Vdbox[2], center=true)
+                rounded_square(Rint, [well[0], well[1]]);
+        }
+        %raise() raise(Vdeck[0]/2-Vdbox[2]/2)
+            rotate([0, 90, 90]) cube(Vdeck, center=true);
+    }
+}
+
+module organizer() {
+    %rotate(45) color("#101080", 0.5) box(interior, frame=true, center=true);
+    rotate(180) focus_frame();
+    for (x=[-1, 0, +1]) for (y=[1, 2])
+        translate([x*(gap0+Vdbox[0]), (0.5-y)*(gap0+Vdbox[1])-16, Vdbox[2]/2])
+            deck_box(center=true);
+    translate([2, -109]) rotate(-30) {
         nmap = 16;
         ncap = 5;
-        map_tile_box(nmap);
-        raise_lid(nmap) map_tile_box(ncap, lid=true);
-        raise_lid(nmap) raise_lid(ncap) map_tile_lid();
+        map_tile_box(nmap, center=true);
+        raise_lid(nmap) map_tile_box(ncap, lid=true, center=true);
+        *raise_lid(nmap) raise_lid(ncap) map_tile_lid(center=true);
     }
-    nfort = 5;
-    raise_lid(nfort) map_hex_lid();
-    map_hex_box(nfort);
+    translate([65, -81]) rotate(-30) {
+        nfort = 5;
+        raise_lid(nfort) map_hex_lid(center=true);
+        map_hex_box(nfort, center=true);
+    }
 }
 
 *map_hex_lid(center=true);
@@ -305,3 +332,7 @@ union() {
 *map_tile_lid(center=true);
 *map_tile_box(5, lid=true, center=true);
 *map_tile_box(16, lid=false, center=true);
+
+*deck_box(center=true);
+
+organizer();
