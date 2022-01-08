@@ -73,7 +73,8 @@ wall0 = xwall(4);
 floor0 = qlayer(wall0);
 gap0 = 0.1;
 
-interior = [287, 287, 67.5];
+// box metrics
+interior = [287, 287, 67.5];  // box interior
 module box(size, wall=1, frame=false, a=0, center=false) {
     vint = is_list(size) ? size : [size, size, size];
     vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
@@ -92,6 +93,46 @@ module box(size, wall=1, frame=false, a=0, center=false) {
     }
 }
 
+// component metrics
+Nplayers = 5;
+Nmaps = 16;  // number of map and water tiles
+Hboard = 2.25;  // tile & token thickness
+Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
+Hcap = clayer(4);  // total height of lid + plug
+Vfocus5 = [371, 11.5, 21.5];
+Vfocus4 = [309, 9, 22];
+Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
+Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
+
+Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
+Gmap = [
+    [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
+    [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-0.5, 2],
+    [-1, 1], [-2, 1], [-2.5, 0], [-2, -1], [-2.5, -2],
+    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -3],
+    [2, -3], [2.5, -2], [2, -1],
+];
+
+// container metrics
+Hlid = floor0;  // height of cap lid
+Hplug = Hcap - Hlid;  // depth of lid below cap
+Rint = 1;  // internal corner radius (distance from contents to wall)
+Rext = Rint+wall0;  // external corner radius
+Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
+Alid = 30;  // angle of lid chamfer
+Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
+Hchamfer = (Rext-Rplug) * tan(Alid);
+Gbox = [
+    [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
+    [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-2, 3],
+    [-2.5, 2], [-2, 1], [-2.5, 0], [-2, -1], [-2.5, -2],
+    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -5],
+    [2, -5], [2.5, -4], [2, -3], [2.5, -2], [2, -1],
+];
+Ghole = [
+    [1.5, -4], [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
+    [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
+];
 function diag2(x, y) = sqrt(x*x + y*y);
 function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
 
@@ -102,14 +143,13 @@ module interior(a=45, center=false) {
 
 module focus_frame(half=0, center=false) {
     axis = sign(half);
-    focus6 = [371, 11.5, 21.5];
-    focus5 = [309, 9, 22];
-    slot6 = [focus6[0] + 1, focus6[1] + 1, clayer(focus6[2] + 0.8)];
-    slot5 = [focus5[0] + 1, focus5[1] + 1, clayer(focus5[2]) + slot6[2]];
+    // TODO: switch to full Rext border instead of 1/2 Rint + wall0?
+    slot5 = [Vfocus5[0]+Rint, Vfocus5[1]+Rint, clayer(Vfocus5[2]+0.8)];
+    slot4 = [Vfocus4[0]+Rint, Vfocus4[1]+Rint, clayer(Vfocus4[2])+slot5[2]];
     block = [
         diag2(interior[0], interior[1]),
-        max(slot5[1], slot6[1]) + 2*wall0,
-        slot5[2] + floor0,
+        max(slot4[1], slot5[1]) + 2*wall0,
+        slot4[2] + floor0,
     ];
 
     origin = [0, 0, center ? 0 : block[2]/2];
@@ -151,10 +191,10 @@ module focus_frame(half=0, center=false) {
         translate([0, block[1]/2, 0])
         difference() {
             cube(block, center=true);
-            cut(slot6, block);
             cut(slot5, block);
-            vee(slot6, block);
-            half(slot5, block);
+            cut(slot4, block);
+            vee(slot5, block);
+            half(slot4, block);
         }
     }
 }
@@ -166,33 +206,6 @@ module rounded_square(r, size, center=true) {
     offset(r=r) offset(r=-r) square(size, center);
 }
 
-Hboard = 2.25;  // tile & token thickness
-Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
-Hcap = clayer(4);  // total height of lid + plug
-Hlid = floor0;  // height of cap lid
-Hplug = Hcap - Hlid;  // depth of lid below cap
-Rint = 1;  // internal corner radius (distance from contents to wall)
-Rext = Rint+wall0;  // external corner radius
-Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
-Alid = 30;  // angle of lid chamfer
-Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
-Hchamfer = (Rext-Rplug) * tan(Alid);
-
-Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
-Gmap = [
-    [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
-    [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-0.5, 2],
-    [-1, 1], [-2, 1], [-2.5, 0], [-2, -1], [-2.5, -2],
-    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -3],
-    [2, -3], [2.5, -2], [2, -1],
-];
-Gbox = [
-    [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
-    [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-2, 3],
-    [-2.5, 2], [-2, 1], [-2.5, 0], [-2, -1], [-2.5, -2],
-    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -5],
-    [2, -5], [2.5, -4], [2, -3], [2.5, -2], [2, -1],
-];
 function hex_grid(x, y, r=Rhex) = [r*x, sin(60)*r*y];
 function hex_points(grid=Ghex, r=Rhex) = [for (i=grid) hex_grid(i[0],i[1],r)];
 function hex_min(grid=Ghex, r=Rhex) =
@@ -264,17 +277,16 @@ module map_tile_poly(center=false) {
 module map_tile(n=1, center=false) {
     hex_tile(n=n, grid=Gmap, center=center);
 }
-Ghole = [
-    [1.5, -4], [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
-    [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
-];
-module map_tile_box(n=1, plug=false, center=false) {
+module map_tile_box(n=Nmaps, plug=false, center=false) {
     difference() {
         hex_box(n=n, plug=plug, grid=Gbox, ghost=Gmap, center=center);
         for (p=hex_points(Ghole)) translate(p)
             linear_extrude(2*Hcap, center=true)
             offset(r=Rext) offset(r=-Rhex/4-Rext) hex_poly(center=center);
     }
+}
+module map_tile_capitals(center=false) {
+    map_tile_box(n=Nplayers, plug=true, center=center);
 }
 module map_tile_lid(center=false) {
     difference() {
@@ -284,9 +296,17 @@ module map_tile_lid(center=false) {
             offset(r=Rint) offset(delta=-Rhex/4-Rint) hex_poly(center=center);
     }
 }
-
 module raise_lid(n=0, k=1, plug=false) {
     raise(stack_height(n=n, k=k, plug=plug, lid=true) - Hlid) children();
+}
+module map_tile_stack() {
+    nmap = 16;
+    ncap = 5;
+    map_tile_box(nmap, center=true);
+    raise_lid(nmap) {
+        map_tile_box(ncap, plug=true, center=true);
+        raise_lid(ncap) map_tile_lid(center=true);
+    }
 }
 
 Vdeck = vdeck(29, green_sleeve, thick_sleeve);
@@ -330,30 +350,34 @@ module deck_box(color=undef, center=false) {
 }
 
 module organizer() {
-    %rotate(45) color("#101080", 0.5) box(interior, frame=true, center=true);
-    rotate(180) focus_frame();
-    dc = ["darkorange", "springgreen", "aqua",
-        "crimson", "maroon", "mediumpurple"];
-    for (x=[-1, 0, +1]) for (y=[1, 2])
-        translate([x*(gap0+Vdbox[0]), (0.5-y)*(gap0+Vdbox[1])-16, Vdbox[2]/2])
-            deck_box(color=dc[3*y+x-2], center=true);
-    translate([0, -109]) rotate(90) {
-        nmap = 16;
-        ncap = 5;
-        raise_lid(k=0, plug=true) {
-            map_tile_box(nmap, plug=true, center=true);
-            raise_lid(nmap) {
-                map_tile_box(ncap, plug=true, center=true);
-                raise_lid(ncap) map_tile_lid(center=true);
-            }
+    // box shape and manuals
+    // everything needs to fit inside this!
+    %color("#101080", 0.5) box(interior, frame=true, center=true);
+    %color("#101080", 0.1) raise(interior[2] - Vmanual2[2]/2) {
+        cube(Vmanual2, center=true);
+        raise(-(Vmanual1[2]+Vmanual2[2])/2) cube(Vmanual1, center=true);
+    }
+    rotate(135) {
+        // focus bars
+        focus_frame();
+        translate([0, Vfocus5[1]+Rext+wall0+gap0]) {
+            deltadb = [Vdbox[0]+gap0, Vdbox[1]+gap0];
+            // player deck boxes
+            dc = ["darkorange", "springgreen", "aqua",
+                "crimson", "maroon", "mediumpurple"];
+            for (x=[-1, 0, +1]) for (y=[1, 2])
+                translate([x*deltadb[0], (y-0.5)*deltadb[1], Vdbox[2]/2])
+                    deck_box(color=dc[3*y+x-2], center=true);
+            // map tiles
+            ystack = 5*Rhex + 2*Rext + gap0;
+            translate([0, 2*deltadb[1]+ystack/2]) rotate(-90) map_tile_stack();
         }
     }
 }
 
+*map_tile_box(center=true);
+*map_tile_capitals(center=true);
 *map_tile_lid(center=true);
-*map_tile_box(5, plug=true, center=true);
-*map_tile_box(16, plug=false, center=true);
-
 *deck_box(center=true);
 
 organizer();
