@@ -112,6 +112,8 @@ Vfocus5 = [371, 5*Hboard, 21.5];
 Vfocus4 = [309, 4*Hboard, 22];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
+Hroom = floor(Vinterior[2] - Vmanual1[2] - Vmanual2[2]);
+Hlayer = Hroom/2;
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -265,11 +267,12 @@ module hex_lid(grid=Ghex, r=Rhex) {
 
 function hex_box_height(n=1, plug=false) =
     clayer(floor0 + n*Hboard + Rint + Hplug) + (plug ? Hplug : 0);
-function stack_height(n=0, k=1, plug=true, lid=true) =
-    (k ? hex_box_height(n) : 0) +
-    (k-1)*clayer(Hseam) +
-    (plug ? Hplug : 0) +
-    (lid ? clayer(Hseam) + Hlid : 0);
+function sum(v) = v ? [for(p=v) 1]*v : 0;
+function stack_height(v=[], plug=false, lid=false) =
+    sum([for (n=v) hex_box_height(n)]) +  // box heights
+    max(0, len(v)-1)*clayer(Hseam) +  // gaps between boxes
+    (plug ? Hplug : 0) +  // plug below
+    (lid ? sign(len(v))*clayer(Hseam) + Hlid : 0);  // lid above
 
 module hex_box(n=1, plug=false, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
     h = hex_box_height(n=n, plug=false);
@@ -321,16 +324,16 @@ module map_tile_lid(color=undef) {
             offset(r=Rint) offset(delta=-Rhex/4-Rint) hex_poly();
     }
 }
-module raise_lid(n=0, k=1, plug=false) {
-    raise(stack_height(n=n, k=k, plug=plug, lid=true) - Hlid) children();
+module raise_lid(v=[], plug=false) {
+    raise(stack_height(v, plug=plug, lid=true) - Hlid) children();
 }
 module map_tile_stack(color=undef) {
     nmap = 16;
     ncap = 5;
     map_tile_box(nmap, color=color);
-    raise_lid(nmap) {
+    raise_lid([nmap]) {
         map_tile_box(ncap, plug=true, color=color);
-        raise_lid(ncap) map_tile_lid(color=color);
+        raise_lid([ncap]) map_tile_lid(color=color);
     }
 }
 
@@ -398,6 +401,9 @@ module organizer() {
             translate([0, 2*deltadb[1]+ystack/2]) rotate(-90)
                 map_tile_stack(color="maroon");
         }
+        echo(Hroom, Hlayer);
+        echo(Vdbox[2]);
+        echo(stack_height([Nplayers, Nmaps], lid=true));
     }
     // everything above the bar
     rotate(-45) translate([0, Rext+gap0]) {
