@@ -41,7 +41,7 @@ $fs = min(layer_height/2, xspace(1)/2);
 inch = 25.4;
 card = [2.5*inch, 3.5*inch];  // standard playing card dimensions
 
-// seams add about 1/2mm to each dimension
+// Gamegenic sleeves
 sand_sleeve = [81, 122];  // Dixit
 orange_sleeve = [73, 122];  // Tarot
 magenta_sleeve = [72, 112];  // Scythe
@@ -55,17 +55,22 @@ ruby_sleeve = [46, 71];  // Mini European
 green_sleeve = [59, 91];  // Standard American
 yellow_sleeve = [44, 67];  // Mini American
 catan_sleeve = [56, 82];  // Catan (English)
+// Sleeve Kings sleeves
+super_large_sleeve = [104, 129];
 
-no_sleeve = 0.35;  // common unsleeved card thickness (UG assumes 0.325)
-thin_sleeve = 0.1;  // 50 micron sleeves
-thick_sleeve = 0.2;  // 100 micron sleeves
-double_sleeve = thick_sleeve + thin_sleeve;
-function double_sleeve_count(d) = floor(d / (no_sleeve + double_sleeve));
-function thick_sleeve_count(d) = floor(d / (no_sleeve + thick_sleeve));
-function thin_sleeve_count(d) = floor(d / (no_sleeve + thin_sleeve));
-function unsleeved_count(d) = floor(d / no_sleeve);
-function vdeck(n=1, card=yellow_sleeve, sleeve=double_sleeve) =
-    [card[0], card[1], n*(no_sleeve+sleeve)];
+playing_card = 0.35;  // common unsleeved card thickness (UG assumes 0.325)
+leader_card = 0.45;  // thickness of Civilization leader sheets
+no_sleeve = 0;
+penny_sleeve = 0.08;  // 40 micron sleeves (Mayday)
+thick_sleeve = 0.12;  // 60 micron sleeves (Sleeve Kings)
+premium_sleeve = 0.2;  // 100 micron sleeves (Gamegenic)
+double_sleeve = 0.3;  // premium sleeve + inner sleeve
+function card_count(h, quality=no_sleeve, card=playing_card) =
+    floor(d / (card + quality));
+function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
+    wide ? max(sleeve[0], sleeve[1]) : min(sleeve[0], sleeve[1]),
+    wide ? min(sleeve[0], sleeve[1]) : max(sleeve[0], sleeve[1]),
+    n*(quality+card)];
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
 function diag2(x, y) = sqrt(x*x + y*y);
@@ -133,6 +138,7 @@ Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
 Alid = 30;  // angle of lid chamfer
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
 Hchamfer = (Rext-Rplug) * tan(Alid);
+Dthumb = 25;  // thumb cutout diameter
 Gbox = [
     [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
     [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-2, 3],
@@ -337,13 +343,18 @@ module map_tile_stack(color=undef) {
     }
 }
 
-Vdeck = vdeck(29, green_sleeve, thick_sleeve);
-Vdbox = [for (x=[  // round dimensions to even layers
-    Vdeck[1] + 2*Rext,
-    Vdeck[2] + 2*Rext,
-    Vdeck[0] + Rint + floor0,
-]) qlayer(x)];
+function deck_box_volume(v) = [for (x=[  // round dimensions to even layers
+    v[1] + 2*Rext,
+    v[2] + 2*Rext,
+    v[0] + Rint + floor0]) qlayer(x)];
+function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
+    v[0] + 2*Rext,
+    v[1] + 2*Rext,
+    v[2] + 2*Rint + floor0]) qlayer(x)];
 
+// player focus decks: Gamegenic green sleeves
+Vdeck = vdeck(29, green_sleeve, premium_sleeve);
+Vdbox = deck_box_volume(Vdeck);
 module deck_box(color=undef) {
     module shell(block) {
         linear_extrude(block[2]/2)
@@ -373,6 +384,41 @@ module deck_box(color=undef) {
     %raise(floor0 + Vdeck[0]/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
 
+// leader sheets: thick card with Sleeve Kings super large sleeve
+Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
+
+module card_tray(v, wide=false, color=undef) {
+    // TODO: round height to a simple fraction of Hlayer?
+    vtray = card_tray_volume(v);
+    shell = [vtray[0], vtray[1]];
+    well = shell - [2*wall0, 2*wall0];
+    echo(vtray);
+    color(color) {
+        difference() {
+            intersection() {
+                linear_extrude(vtray[2]) rounded_square(Rext, shell);
+                wall_vee(vtray, Dthumb);
+            }
+            raise(-1) linear_extrude(vtray[2]+2) rounded_square(Rint, well);
+        }
+        linear_extrude(vtray[2]) translate([0, vtray[1]-wall0]/2)
+            square([vtray[0]-2*Rext, wall0], center=true);
+        linear_extrude(floor0) difference() {
+            rounded_square(Rext, shell);
+            hull() {
+                translate([0, wall0-vtray[1]/2]) circle(d=Dthumb);
+                translate([0, -vtray[1]/2])
+                    square([Dthumb, 2*wall0], center=true);
+            }
+            circle(d=min(well[0]/2, well[1]/2, well[1] - 2*Dthumb));
+        }
+    }
+    %raise(floor0 + v[2]/2) cube(v, center=true);
+}
+module leaders_card_tray(color=undef) {
+    card_tray(Vleaders, wide=true, color=color);
+}
+
 module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
@@ -384,29 +430,35 @@ module organizer() {
         }
     }
     // focus frame bar and everything below
+    colors = [
+        "#600020",
+        "crimson",
+        "darkorange",
+        "springgreen",
+        "aqua",
+        "mediumpurple",
+    ];
     rotate(135) translate([0, -Rext]) {
         // focus bars
-        focus_frame(color="maroon");
+        focus_frame(color=colors[0]);
         translate([0, Vfframe[1]+gap0]) {
             // player deck boxes
             deltadb = [Vdbox[0]+gap0, Vdbox[1]+gap0];
-            dc = ["darkorange", "springgreen", "aqua",
-                "crimson", "maroon", "mediumpurple"];
+            player = [2, 3, 4, 1, 0, 5];
             translate([0, Vdbox[1]/2])
                 for (x=[-1, 0, +1]) for (y=[0, 1])
                 translate([x*deltadb[0], y*deltadb[1], 0])
-                    deck_box(color=dc[3*y+x+1]);
+                    deck_box(color=colors[player[3*y+x+1]]);
             // map tiles
             ystack = 5*Rhex + 2*Rext;
             translate([0, 2*deltadb[1]+ystack/2]) rotate(-90)
-                map_tile_stack(color="maroon");
+                map_tile_stack(color=colors[0]);
         }
-        echo(Hroom, Hlayer);
-        echo(Vdbox[2]);
-        echo(stack_height([Nplayers, Nmaps], lid=true));
     }
     // everything above the bar
     rotate(-45) translate([0, Rext+gap0]) {
+        translate([0, card_tray_volume(Vleaders)[0]/2]) rotate(90)
+            leaders_card_tray(color=colors[0]);
         // TODO
     }
 }
@@ -419,5 +471,6 @@ module organizer() {
 *map_tile_capitals();
 *map_tile_lid();
 *deck_box();
+*leaders_card_tray();
 
 organizer();
