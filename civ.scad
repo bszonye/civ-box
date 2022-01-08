@@ -68,18 +68,27 @@ function vdeck(n=1, card=yellow_sleeve, sleeve=double_sleeve) =
     [card[0], card[1], n*(no_sleeve+sleeve)];
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
+function diag2(x, y) = sqrt(x*x + y*y);
+function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
+
+module raise(z=floor0) {
+    translate([0, 0, z]) children();
+}
+module rounded_square(r, size) {
+    offset(r=r) offset(r=-r) square(size, center=true);
+}
 
 wall0 = xwall(4);
 floor0 = qlayer(wall0);
 gap0 = 0.1;
 
 // box metrics
-interior = [287, 287, 67.5];  // box interior
-module box(size, wall=1, frame=false, a=0, center=false) {
+Vinterior = [287, 287, 67.5];  // box interior
+module box(size, wall=1, frame=false, a=0) {
     vint = is_list(size) ? size : [size, size, size];
     vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
     vcut = [vint[0], vint[1], vint[2] - wall];
-    origin = center ? [0, 0, vext[2]/2 - wall] : vext/2;
+    origin = [0, 0, vext[2]/2 - wall];
     translate(origin) rotate(a) {
         difference() {
             cube(vext, center=true);  // exterior
@@ -99,8 +108,8 @@ Nmaps = 16;  // number of map and water tiles
 Hboard = 2.25;  // tile & token thickness
 Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
 Hcap = clayer(4);  // total height of lid + plug
-Vfocus5 = [371, 11.5, 21.5];
-Vfocus4 = [309, 9, 22];
+Vfocus5 = [371, 5*Hboard, 21.5];
+Vfocus4 = [309, 4*Hboard, 22];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
 
@@ -133,77 +142,102 @@ Ghole = [
     [1.5, -4], [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
     [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
 ];
-function diag2(x, y) = sqrt(x*x + y*y);
-function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
 
-module interior(a=45, center=false) {
-    origin = [0, 0, center ? 0 : interior[2]/2];
-    translate(origin) rotate(a) cube(interior, center=true);
+Vfframe = [for (x=[  // round dimensions to even layers
+    diag2(Vinterior[0], Vinterior[1]),
+    max(Vfocus4[1], Vfocus5[1]) + 2*Rext - Rint,  // 1mm narrower than usual
+    floor0 + Vfocus4[2] + Vfocus5[2] + 2*Rint,
+]) qlayer(x)];
+
+module wall_vee(size, span, a=64.5, side=undef) {
+    y0 = 0;
+    y1 = floor0;
+    y2 = size[2];
+    rise = y2 - y1;
+    run = rise/tan(a);
+    x0 = span/2;
+    x1 = x0 + run;
+    x2 = x1 + 2*Rext;
+    x3 = size[0]/2;
+    poly = [[x2, y0], [x2, y2], [x1, y2], [x0, y1], [x0, y0]];
+    draw = side ? [sign(side)] : [-1, +1];
+    for (s=draw) scale([s, 1, 1]) translate([0, size[1]/2]) rotate([90, 0, 0])
+            linear_extrude(size[1]) hull() {
+        offset(r=Rext) offset(r=-Rext) polygon(poly);
+        translate([x0, 0]) square([x3-x0, y1]);
+        translate([x3-gap0, 0]) square([gap0, y2]);
+    }
 }
 
-module focus_frame(half=0, center=false) {
-    axis = sign(half);
-    // TODO: switch to full Rext border instead of 1/2 Rint + wall0?
-    slot5 = [Vfocus5[0]+Rint, Vfocus5[1]+Rint, clayer(Vfocus5[2]+0.8)];
-    slot4 = [Vfocus4[0]+Rint, Vfocus4[1]+Rint, clayer(Vfocus4[2])+slot5[2]];
-    block = [
-        diag2(interior[0], interior[1]),
-        max(slot4[1], slot5[1]) + 2*wall0,
-        slot4[2] + floor0,
-    ];
+module focus_frame(section=undef, color=undef) {
+    // section:
+    // undef = whole part
+    // -1 = left only
+    //  0 = joiner only
+    // +1 = right only
 
-    origin = [0, 0, center ? 0 : block[2]/2];
-    module cut(slot, block) {
-        cut = [slot[0], slot[1], 2*slot[2]];
-        translate([0, 0, block[2]/2]) cube(cut, center=true);
-    }
-    module vee(slot, block) {
-        vee = [
-            [0, floor0 - block[2]],
-            [+slot[0]/2, 0],
-            [+slot[0]/2, 1],
-            [-slot[0]/2, 1],
-            [-slot[0]/2, 0],
-        ];
-        translate([0, 0, block[2]/2]) rotate([90, 0, 0])
-            linear_extrude(2*block[1], center=true) polygon(vee);
-    }
-    module half(slot, block) {
-        if (axis != 0) rotate(90*sign(axis)) {
-            notch = slot[1]/2;
-            jig = [
-                [-notch+gap0/2, 0],
-                [-notch+gap0/2, +2*notch],
-                [-gap0/2, +2*notch],
-                [-gap0/2, -2*notch],
-                [notch, -2*notch],
-                [notch, 0],
-                [+block[1], 0],
-                [+block[1], +block[0]],
-                [-block[1], +block[0]],
-                [-block[1], 0],
-            ];
-            linear_extrude(2*block[2], center=true) polygon(jig);
+    // wall thicknesses
+    f5wall = wall0;
+    f4wall = qwall((Vfocus5[1] - Vfocus4[1]) / 2 + wall0);
+    // well sizes (1mm longer than usual)
+    f5well = [Vfocus5[0] + 3*Rint, Vfframe[1] - 2*f5wall];
+    f4well = [Vfocus4[0] + 3*Rint, Vfframe[1] - 2*f4wall];
+    // space between sections
+    xjoint = 1.5*inch;
+
+    module shell(block, side) {
+        color(color) {
+            y0 = 0;
+            y1 = Vfframe[1];
+            x0 = Vfframe[0]/2 + Rext;
+            x1 = x0 - Vfframe[1];
+            x2 = x1 - 2*Rext;
+            x3 = Vfocus4[0]/2;
+            corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
+            linear_extrude(Vfframe[2]) hull() {
+                offset(r=Rext) offset(r=-Rext) polygon(corner);
+                translate([x3, 0]) square(y1);
+            }
+            translate([0, Vfframe[1]/2])
+                wall_vee([f4well[0], Vfframe[1], Vfframe[2]], xjoint, side=+1);
         }
     }
-    translate(origin) intersection() {
-        interior(center=true);
-        translate([0, block[1]/2, 0])
-        difference() {
-            cube(block, center=true);
-            cut(slot5, block);
-            cut(slot4, block);
-            vee(slot5, block);
-            half(slot4, block);
+    if (section) {  // half riser only
+        side = sign(section);
+        // color(color)
+        scale([sign(section), 1]) difference() {
+            shell(Vfframe, side);
+            translate([0, Vfframe[1]/2]) raise() {
+                linear_extrude(Vfframe[2]) rounded_square(Rint, f4well);
+                raise(Vfocus4[2]+Rint)
+                    linear_extrude(Vfframe[2]) rounded_square(Rint, f5well);
+            }
+            // joint notch
+            translate([0, Vfframe[1]/2]) linear_extrude(3*floor0, center=true)
+                square([xjoint*3, f4well[1]-2*gap0], center=true);
+        }
+    } else if (section == 0) {  // joiner only
+        color(color) {
+            translate([0, Vfframe[1]/2]) linear_extrude(floor0) {
+                square([xjoint, Vfframe[1]], center=true);
+                square([xjoint*3, f4well[1]-2*gap0], center=true);
+            }
+        }
+    } else {
+        focus_frame(+1, color=color);
+        focus_frame(-1, color=color);
+        color(color) {
+            translate([0, Vfframe[1]/2]) linear_extrude(floor0) {
+                square([xjoint*3, Vfframe[1]], center=true);
+            }
+        }
+        // ghost focus bars
+        %translate([0, Vfframe[1]/2]) {
+            raise(floor0 + Vfocus4[2]/2) cube(Vfocus4, center=true);
+            raise(floor0 + Vfocus4[2] + Rint + Vfocus5[2]/2)
+                cube(Vfocus5, center=true);
         }
     }
-}
-
-module raise(z=floor0) {
-    translate([0, 0, z]) children();
-}
-module rounded_square(r, size, center=true) {
-    offset(r=r) offset(r=-r) square(size, center);
 }
 
 function hex_grid(x, y, r=Rhex) = [r*x, sin(60)*r*y];
@@ -211,25 +245,20 @@ function hex_points(grid=Ghex, r=Rhex) = [for (i=grid) hex_grid(i[0],i[1],r)];
 function hex_min(grid=Ghex, r=Rhex) =
     hex_grid(min([for (i=grid) i[0]]), min([for (i=grid) i[1]]), r);
 
-module hex_poly(grid=Ghex, r=Rhex, center=false) {
-    origin = center ? [0, 0] : -hex_min(grid, r);
-    translate(origin) polygon(hex_points(grid, r));
+module hex_poly(grid=Ghex, r=Rhex) {
+    polygon(hex_points(grid, r));
 }
-module hex_tile(n=1, grid=Ghex, r=Rhex, center=false) {
-    linear_extrude(Hboard*n, center=center)
-        hex_poly(grid=grid, r=r, center=center);
+module hex_tile(n=1, grid=Ghex, r=Rhex) {
+    linear_extrude(Hboard*n) hex_poly(grid=grid, r=r);
 }
-module hex_lid(grid=Ghex, r=Rhex, center=false) {
+module hex_lid(grid=Ghex, r=Rhex) {
     xy_min = hex_min(grid, r);
-    origin = center ? [0, 0, 0] : [Rext - xy_min[0], Rext - xy_min[1], 0];
-    translate(origin) {
-        minkowski() {
-            linear_extrude(Hlid, center=false)
-                hex_poly(grid=grid, r=r, center=true);
-            mirror([0, 0, 1]) {
-                cylinder(h=Hplug, r=Rplug);
-                cylinder(h=Hchamfer, r1=Rext, r2=Rplug);
-            }
+    minkowski() {
+        linear_extrude(Hlid, center=false)
+            hex_poly(grid=grid, r=r);
+        mirror([0, 0, 1]) {
+            cylinder(h=Hplug, r=Rplug);
+            cylinder(h=Hchamfer, r1=Rext, r2=Rplug);
         }
     }
 }
@@ -242,88 +271,83 @@ function stack_height(n=0, k=1, plug=true, lid=true) =
     (plug ? Hplug : 0) +
     (lid ? clayer(Hseam) + Hlid : 0);
 
-module hex_box(n=1, plug=false, grid=Ghex, r=Rhex, ghost=undef, center=false) {
+module hex_box(n=1, plug=false, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
     h = hex_box_height(n=n, plug=false);
-    origin = center ? [0, 0] : -hex_min(grid, r) + [1, 1] * Rext;
-    translate(origin) {
-        difference() {
-            // exterior
-            union() {
-                linear_extrude(h, center=false)
-                    offset(r=Rext) hex_poly(grid=grid, r=r, center=true);
-                if (plug) hex_lid(grid=grid, r=r, center=true);
-            }
-            // interior
-            raise() linear_extrude(h, center=false)
-                offset(r=Rext-wall0) hex_poly(grid=grid, r=r, center=true);
-            // lid chamfer
-            raise(h+Hseam) hex_lid(grid=grid, center=true);
+    color(color) difference() {
+        // exterior
+        union() {
+            linear_extrude(h, center=false)
+                offset(r=Rext) hex_poly(grid=grid, r=r);
+            if (plug) hex_lid(grid=grid, r=r);
         }
-        // ghost tiles
-        %raise(floor0 + Hboard * n/2)
-            hex_tile(n=n, grid=(ghost ? ghost : grid), r=r, center=true);
+        // interior
+        raise() linear_extrude(h, center=false)
+            offset(r=Rext-wall0) hex_poly(grid=grid, r=r);
+        // lid chamfer
+        raise(h+Hseam) hex_lid(grid=grid);
     }
+    // ghost tiles
+    %raise(floor0) hex_tile(n=n, grid=(ghost ? ghost : grid), r=r);
 }
 
-module map_hex_poly(center=false) {
-    hex_poly(grid=Ghex, center=center);
+module map_hex_poly() {
+    hex_poly(grid=Ghex);
 }
-module map_hex(n=1, center=false) {
-    hex_tile(n=n, grid=Ghex, center=center);
+module map_hex(n=1) {
+    hex_tile(n=n, grid=Ghex);
 }
-module map_tile_poly(center=false) {
-    hex_poly(grid=Gmap, center=center);
+module map_tile_poly() {
+    hex_poly(grid=Gmap);
 }
-module map_tile(n=1, center=false) {
-    hex_tile(n=n, grid=Gmap, center=center);
+module map_tile(n=1) {
+    hex_tile(n=n, grid=Gmap);
 }
-module map_tile_box(n=Nmaps, plug=false, center=false) {
+module map_tile_box(n=Nmaps, plug=false, color=undef) {
     difference() {
-        hex_box(n=n, plug=plug, grid=Gbox, ghost=Gmap, center=center);
+        hex_box(n=n, plug=plug, grid=Gbox, ghost=Gmap, color=color);
         for (p=hex_points(Ghole)) translate(p)
             linear_extrude(2*Hcap, center=true)
-            offset(r=Rext) offset(r=-Rhex/4-Rext) hex_poly(center=center);
+            offset(r=Rext) offset(r=-Rhex/4-Rext) hex_poly();
     }
 }
-module map_tile_capitals(center=false) {
-    map_tile_box(n=Nplayers, plug=true, center=center);
+module map_tile_capitals(color=undef) {
+    map_tile_box(n=Nplayers, plug=true, color=color);
 }
-module map_tile_lid(center=false) {
-    difference() {
-        hex_lid(grid=Gbox, center=center);
+module map_tile_lid(color=undef) {
+    color(color) difference() {
+        hex_lid(grid=Gbox);
         for (p=hex_points(Ghole)) translate(p)
             linear_extrude(2*Hcap, center=true)
-            offset(r=Rint) offset(delta=-Rhex/4-Rint) hex_poly(center=center);
+            offset(r=Rint) offset(delta=-Rhex/4-Rint) hex_poly();
     }
 }
 module raise_lid(n=0, k=1, plug=false) {
     raise(stack_height(n=n, k=k, plug=plug, lid=true) - Hlid) children();
 }
-module map_tile_stack() {
+module map_tile_stack(color=undef) {
     nmap = 16;
     ncap = 5;
-    map_tile_box(nmap, center=true);
+    map_tile_box(nmap, color=color);
     raise_lid(nmap) {
-        map_tile_box(ncap, plug=true, center=true);
-        raise_lid(ncap) map_tile_lid(center=true);
+        map_tile_box(ncap, plug=true, color=color);
+        raise_lid(ncap) map_tile_lid(color=color);
     }
 }
 
 Vdeck = vdeck(29, green_sleeve, thick_sleeve);
-Vdbox = [  // round dimensions to even layers
-    qlayer(Vdeck[1] + 2*Rext),
-    qlayer(Vdeck[2] + 2*Rext),
-    qlayer(Vdeck[0] + Rint + floor0),
-];
+Vdbox = [for (x=[  // round dimensions to even layers
+    Vdeck[1] + 2*Rext,
+    Vdeck[2] + 2*Rext,
+    Vdeck[0] + Rint + floor0,
+]) qlayer(x)];
 
-module deck_box(color=undef, center=false) {
-    origin = center ? [0, 0, 0] : Vdbox/2;
+module deck_box(color=undef) {
     module shell(block) {
-        raise((-block[2])/2) linear_extrude(block[2]/2)
+        linear_extrude(block[2]/2)
             rounded_square(Rext, [block[0], block[1]]);
         for (a=[0,180]) rotate(a) {
             translate([block[0]/2-2*Rext, 0])
-                linear_extrude(block[2], center=true)
+                linear_extrude(block[2])
                 rounded_square(Rext, [4*Rext, block[1]]);
             vee = [
                 [0, 0],
@@ -331,53 +355,63 @@ module deck_box(color=undef, center=false) {
                 [block[0]/2-Rext, block[2]],
                 [block[0]/3-Rext, block[2]],
             ];
-            raise(-block[2]/2) rotate([90, 0, 0])
+            rotate([90, 0, 0])
                 linear_extrude(block[1], center=true)
                 offset(r=Rext) offset(r=-Rext)
                 polygon(vee);
         }
     }
-    translate(origin) {
-        well = [Vdbox[0]-2*wall0, Vdbox[1]-2*wall0];
-        color(color) difference() {
-            shell(Vdbox);
-            raise() linear_extrude(Vdbox[2], center=true)
-                rounded_square(Rint, [well[0], well[1]]);
-        }
-        %raise() raise(Vdeck[0]/2-Vdbox[2]/2)
-            rotate([0, 90, 90]) cube(Vdeck, center=true);
+    well = [Vdbox[0]-2*wall0, Vdbox[1]-2*wall0];
+    color(color) difference() {
+        shell(Vdbox);
+        raise() linear_extrude(Vdbox[2])
+            rounded_square(Rint, [well[0], well[1]]);
     }
+    %raise(floor0 + Vdeck[0]/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
 
 module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
-    %color("#101080", 0.5) box(interior, frame=true, center=true);
-    %color("#101080", 0.1) raise(interior[2] - Vmanual2[2]/2) {
-        cube(Vmanual2, center=true);
-        raise(-(Vmanual1[2]+Vmanual2[2])/2) cube(Vmanual1, center=true);
+    %color("#101080", 0.5) box(Vinterior, frame=true);
+    %color("#101080", 0.1) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
+        raise(Vinterior[2]-Vmanual1[2]-Vmanual2[2]) {
+            cube(Vmanual1);
+            raise(Vmanual2[2]) cube(Vmanual2);
+        }
     }
-    rotate(135) {
+    // focus frame bar and everything below
+    rotate(135) translate([0, -Rext]) {
         // focus bars
-        focus_frame();
-        translate([0, Vfocus5[1]+Rext+wall0+gap0]) {
-            deltadb = [Vdbox[0]+gap0, Vdbox[1]+gap0];
+        focus_frame(color="maroon");
+        translate([0, Vfframe[1]+gap0]) {
             // player deck boxes
+            deltadb = [Vdbox[0]+gap0, Vdbox[1]+gap0];
             dc = ["darkorange", "springgreen", "aqua",
                 "crimson", "maroon", "mediumpurple"];
-            for (x=[-1, 0, +1]) for (y=[1, 2])
-                translate([x*deltadb[0], (y-0.5)*deltadb[1], Vdbox[2]/2])
-                    deck_box(color=dc[3*y+x-2], center=true);
+            translate([0, Vdbox[1]/2])
+                for (x=[-1, 0, +1]) for (y=[0, 1])
+                translate([x*deltadb[0], y*deltadb[1], 0])
+                    deck_box(color=dc[3*y+x+1]);
             // map tiles
-            ystack = 5*Rhex + 2*Rext + gap0;
-            translate([0, 2*deltadb[1]+ystack/2]) rotate(-90) map_tile_stack();
+            ystack = 5*Rhex + 2*Rext;
+            translate([0, 2*deltadb[1]+ystack/2]) rotate(-90)
+                map_tile_stack(color="maroon");
         }
+    }
+    // everything above the bar
+    rotate(-45) translate([0, Rext+gap0]) {
+        // TODO
     }
 }
 
-*map_tile_box(center=true);
-*map_tile_capitals(center=true);
-*map_tile_lid(center=true);
-*deck_box(center=true);
+*focus_frame(+1);
+*focus_frame(-1);
+*focus_frame(0);
+*raise(-floor0-gap0) focus_frame(0);
+*map_tile_box();
+*map_tile_capitals();
+*map_tile_lid();
+*deck_box();
 
 organizer();
