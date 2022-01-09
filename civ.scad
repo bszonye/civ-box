@@ -76,19 +76,56 @@ function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
 function diag2(x, y) = sqrt(x*x + y*y);
 function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
 
+// utility modules
 module raise(z=floor0) {
     translate([0, 0, z]) children();
 }
 module rounded_square(r, size) {
     offset(r=r) offset(r=-r) square(size, center=true);
 }
+module stadium(size) {
+    if (is_list(size)) {
+        hull() {
+            if (size[0] < size[1]) {
+                d = size[0];
+                a = [d, size[1]-d];
+                for (i=[-1,+1]) translate([0, i*a[1]/2]) circle(d=d);
+            } else {
+                d = size[1];
+                a = [size[0]-d, d];
+                for (i=[-1,+1]) translate([i*a[0]/2, 0]) circle(d=d);
+            }
+        }
+    } else stadium([size, size]);
+}
+
+module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
+    // groove = false: positive image. gap is inset from the bounding box.
+    // groove = true: negative image. gap is extended above top and below base.
+    top = size - (groove ? 0 : 1) * [gap, gap];
+    rise = flayer(h/2);
+    run = rise / tan(a);
+    echo(rise, run);
+    base = top + 2*[run, run];
+    hull() {
+        linear_extrude(h) stadium(top);
+        linear_extrude(h - rise) stadium(base);
+    }
+    if (groove) {
+        linear_extrude(h+gap) stadium(top);
+        linear_extrude(2*gap, center=true) stadium(base);
+    }
+}
+
 
 wall0 = xwall(4);
 floor0 = qlayer(wall0);
 gap0 = 0.1;
 
 // box metrics
-Vinterior = [287, 287, 67.5];  // box interior
+Vinterior = [288, 288, 69];  // box interior
+Hwrap0 = 53;  // cover art wrap ends here
+Hwrap1 = 56;  // avoid stacks between 53-56mm total height
 module box(size, wall=1, frame=false, a=0) {
     vint = is_list(size) ? size : [size, size, size];
     vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
@@ -103,6 +140,11 @@ module box(size, wall=1, frame=false, a=0) {
                 for (n=[0:2]) for (i=[-1,+1])
                     translate(2*i*unit_axis(n)*wall) cube(vcut, center=true);
             }
+        }
+        raise(Hwrap0 + wall-vext[2]/2)
+            linear_extrude(Hwrap1-Hwrap0) difference() {
+            square([vint[0]+wall, vint[1]+wall], center=true);
+            square([vint[0], vint[1]], center=true);
         }
     }
 }
@@ -177,7 +219,7 @@ module wall_vee(size, span, a=64.5, side=undef) {
     }
 }
 
-module focus_frame(section=undef, color=undef) {
+module focus_frame(section=undef, xspread=0, color=undef) {
     // section:
     // undef = whole part
     // -1 = left only
@@ -192,6 +234,7 @@ module focus_frame(section=undef, color=undef) {
     f4well = [Vfocus4[0] + 3*Rint, Vfframe[1] - 2*f4wall];
     // space between sections
     xjoint = 1.5*inch;
+    xspan = xspread + xjoint;
 
     module shell(block, side) {
         color(color) {
@@ -210,6 +253,11 @@ module focus_frame(section=undef, color=undef) {
                 wall_vee([f4well[0], Vfframe[1], Vfframe[2]], xjoint, side=+1);
         }
     }
+    module joiner_tongue(groove=false) {
+        d = Vfframe[1]/2;
+        top = [xspan + 3*d, d];
+        translate([0, Vfframe[1]/2]) tongue(top, groove=groove);
+    }
     if (section) {  // half riser only
         side = sign(section);
         // color(color)
@@ -220,23 +268,20 @@ module focus_frame(section=undef, color=undef) {
                 raise(Vfocus4[2]+Rint)
                     linear_extrude(Vfframe[2]) rounded_square(Rint, f5well);
             }
-            // joint notch
-            translate([0, Vfframe[1]/2]) linear_extrude(3*floor0, center=true)
-                square([xjoint*3, f4well[1]-2*gap0], center=true);
+            joiner_tongue(groove=true);
         }
     } else if (section == 0) {  // joiner only
         color(color) {
-            translate([0, Vfframe[1]/2]) linear_extrude(floor0) {
-                square([xjoint, Vfframe[1]], center=true);
-                square([xjoint*3, f4well[1]-2*gap0], center=true);
-            }
+            translate([0, Vfframe[1]/2]) linear_extrude(floor0)
+                square([xspan-gap0, Vfframe[1]], center=true);
+            joiner_tongue();
         }
     } else {
         focus_frame(+1, color=color);
         focus_frame(-1, color=color);
         color(color) {
             translate([0, Vfframe[1]/2]) linear_extrude(floor0) {
-                square([xjoint*3, Vfframe[1]], center=true);
+                square([xjoint*3+2*gap0, Vfframe[1]], center=true);
             }
         }
         // ghost focus bars
@@ -388,31 +433,33 @@ module deck_box(color=undef) {
 Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 
 module card_tray(v, wide=false, color=undef) {
-    // TODO: round height to a simple fraction of Hlayer?
+    // TODO: round height to a simple fraction of Hroom?
     vtray = card_tray_volume(v);
     shell = [vtray[0], vtray[1]];
     well = shell - [2*wall0, 2*wall0];
-    echo(vtray);
     color(color) {
         difference() {
-            intersection() {
-                linear_extrude(vtray[2]) rounded_square(Rext, shell);
-                wall_vee(vtray, Dthumb);
-            }
-            raise(-1) linear_extrude(vtray[2]+2) rounded_square(Rint, well);
-        }
-        linear_extrude(vtray[2]) translate([0, vtray[1]-wall0]/2)
-            square([vtray[0]-2*Rext, wall0], center=true);
-        linear_extrude(floor0) difference() {
-            rounded_square(Rext, shell);
-            hull() {
-                translate([0, wall0-vtray[1]/2]) circle(d=Dthumb);
+            linear_extrude(vtray[2]) rounded_square(Rext, shell);
+            raise() linear_extrude(vtray[2]) {  // well & front opening
+                rounded_square(Rint, well);
                 translate([0, -vtray[1]/2])
-                    square([Dthumb, 2*wall0], center=true);
+                    square([vtray[0]-2*Rext, 2*wall0], center=true);
             }
-            circle(d=min(well[0]/2, well[1]/2, well[1] - 2*Dthumb));
+            linear_extrude(3*floor0, center=true) {
+                // thumb round
+                translate([0, -vtray[1]/2]) hull() {
+                    translate([0, wall0]) circle(d=Dthumb);
+                    square([Dthumb, 2*wall0], center=true);
+                }
+                // bottom round
+                circle(d=min(well[0]/2, well[1]/2, well[1] - 2*Dthumb));
+            }
         }
+        // wall notch
+        translate([0, wall0-vtray[1]]/2)
+            wall_vee([vtray[0]-2*Rext, wall0, vtray[2]], Dthumb);
     }
+    // card stack
     %raise(floor0 + v[2]/2) cube(v, center=true);
 }
 module leaders_card_tray(color=undef) {
@@ -422,7 +469,7 @@ module leaders_card_tray(color=undef) {
 module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
-    %color("#101080", 0.5) box(Vinterior, frame=true);
+    %color("#101080", 0.25) box(Vinterior, frame=true);
     %color("#101080", 0.1) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
         raise(Vinterior[2]-Vmanual1[2]-Vmanual2[2]) {
             cube(Vmanual1);
@@ -463,9 +510,17 @@ module organizer() {
     }
 }
 
+// test piece for tongue joint
+*intersection() {
+    focus_frame(+1);
+    translate([0, Vfframe[1]/2]) linear_extrude(5*floor0, center=true)
+        stadium([80, Vfframe[1] + gap0]);
+}
+
 *focus_frame(+1);
 *focus_frame(-1);
 *focus_frame(0);
+*focus_frame(0, xspread=3);
 *raise(-floor0-gap0) focus_frame(0);
 *map_tile_box();
 *map_tile_capitals();
