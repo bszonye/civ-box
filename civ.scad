@@ -111,7 +111,6 @@ module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
     top = size - (groove ? 0 : 1) * [gap, gap];
     rise = flayer(h/2);
     run = rise / tan(a);
-    echo(rise, run);
     base = top + 2*[run, run];
     hull() {
         linear_extrude(h) stadium(top);
@@ -195,13 +194,16 @@ Ghole = [
     [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
 ];
 
+Avee = 65;
+Hshelf4 = Vfocus4[2] + Rint;
+Hshelf5 = Vfocus5[2] + Rext;
 Vfframe = [for (x=[  // round dimensions to even layers
     diag2(Vinterior[0], Vinterior[1]),
     max(Vfocus4[1], Vfocus5[1]) + 2*Rext - Rint,  // 1mm narrower than usual
-    floor0 + Vfocus4[2] + Rint + Vfocus5[2] + Rext,
+    floor0 + Hshelf4 + Hshelf5,
 ]) qlayer(x)];
 
-module wall_vee_cut(size, a=65, gap=gap0) {
+module wall_vee_cut(size, a=Avee, gap=gap0) {
     span = size[0];
     y0 = -2*Rext;
     y1 = 0;
@@ -211,7 +213,6 @@ module wall_vee_cut(size, a=65, gap=gap0) {
     x0 = span/2;
     x1 = x0 + run;
     a1 = (180-a)/2;
-    echo(a, 180-a, a1);
     x2 = x1 + Rext/tan(a1);
     x3 = x2 + Rext;
     poly = [[x3, y0], [x3, y2], [x1, y2], [x0, y1], [x0, y0]];
@@ -222,6 +223,16 @@ module wall_vee_cut(size, a=65, gap=gap0) {
             offset(r=Rext) offset(r=-Rext) polygon(poly);
             translate([x0, y0-y1]) square([x3-x0, y1-y0]);
         }
+    }
+}
+
+module prism(h, shape=1, r=0, scale=1) {
+    // TODO: calculate scale from bounding boxes?
+    linear_extrude(h, scale=scale) offset(r=r) offset(r=-r)
+    if (is_list(shape) && is_list(shape[0])) {
+        polygon(shape);
+    } else {
+        square(shape, center=true);
     }
 }
 
@@ -242,48 +253,55 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     xjoint = 1.5*inch;
     xspan = xspread + xjoint;
 
-    module shell(block) {
-        color(color) {
-            y0 = 0;
-            y1 = Vfframe[1];
-            x0 = Vfframe[0]/2 + Rext;
-            x1 = x0 - Vfframe[1];
-            x2 = x1 - 2*Rext;
-            x3 = xjoint/2;
-            corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
-            difference() {
-                linear_extrude(Vfframe[2]) hull() {
-                    offset(r=Rext) offset(r=-Rext) polygon(corner);
-                    translate([x3, 0]) square(y1);
-                }
-                translate([0, Vfframe[1]/2, floor0])
-                wall_vee_cut([xjoint, Vfframe[1], Vfframe[2]-floor0]);
-            }
-        }
-    }
     module joiner_tongue(groove=false) {
         d = Vfframe[1]/2;
         top = [xspan + 3*d, d];
         translate([0, Vfframe[1]/2]) tongue(top, groove=groove);
     }
-    if (section) {  // half riser only
+    module riser() {
         side = sign(section);
+        y0 = 0;
+        y1 = Vfframe[1];
+        x0 = Vfframe[0]/2 + Rext;
+        x1 = x0 - Vfframe[1];
+        x2 = x1 - 2*Rext;
+        x3 = xjoint/2;
+        corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
         color(color) scale([sign(section), 1]) difference() {
-            shell(Vfframe);
-            translate([0, Vfframe[1]/2]) raise() {
-                linear_extrude(Vfframe[2]) rounded_square(Rint, f4well);
-                raise(Vfocus4[2]+Rint)
-                    linear_extrude(Vfframe[2]) rounded_square(Rint, f5well);
+            // shell
+            linear_extrude(Vfframe[2]) hull() {
+                offset(r=Rext) offset(r=-Rext) polygon(corner);
+                translate([x3, 0]) square(y1);
             }
+            translate([0, Vfframe[1]/2, floor0]) {
+                // vee cut
+                wall_vee_cut([xjoint, Vfframe[1], Vfframe[2]-floor0]);
+                // focus bar wells
+                prism(Vfframe[2], f4well, r=Rint);
+                raise(Hshelf4) prism(Vfframe[2], f5well, r=Rint);
+                // bottom well taper
+                f4top = [f4well[0] + Hshelf4*cos(Avee), f5well[1]];
+                hull() {
+                    raise(1/2*Hshelf4) prism(Vfframe[2], f4well, r=Rint);
+                    raise(Hshelf4) prism(Vfframe[2], f4top, r=Rint);
+                }
+            }
+            // joiner groove
             joiner_tongue(groove=true);
         }
-    } else if (section == 0) {  // joiner only
+    }
+    if (section) {
+        // half riser only
+        riser();
+    } else if (section == 0) {
+        // joiner only
         color(color) {
             translate([0, Vfframe[1]/2]) linear_extrude(floor0)
                 square([xspan-gap0, Vfframe[1]], center=true);
             joiner_tongue();
         }
     } else {
+        // combine everything
         focus_frame(+1, color=color);
         focus_frame(-1, color=color);
         color(color) {
@@ -504,13 +522,6 @@ module organizer() {
     }
 }
 
-module test_tongue() {
-    *intersection() {
-        focus_frame(+1);
-        translate([0, Vfframe[1]/2]) linear_extrude(5*floor0, center=true)
-            stadium([80, Vfframe[1] + gap0]);
-    }
-}
 // tests for card trays
 module test_card_trays() {
     vgreen1 = vdeck(18, green_sleeve, premium_sleeve, wide=false);
@@ -529,6 +540,7 @@ module test_card_trays() {
 }
 *test_card_trays();
 
+*focus_frame();
 *focus_frame(+1);
 *focus_frame(-1);
 *focus_frame(0);
@@ -537,7 +549,7 @@ module test_card_trays() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-*deck_box();
+deck_box();
 *leaders_card_tray();
 
-organizer();
+*organizer();
