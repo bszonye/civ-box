@@ -196,10 +196,10 @@ Ghole = [
 Vfframe = [for (x=[  // round dimensions to even layers
     diag2(Vinterior[0], Vinterior[1]),
     max(Vfocus4[1], Vfocus5[1]) + 2*Rext - Rint,  // 1mm narrower than usual
-    floor0 + Vfocus4[2] + Vfocus5[2] + 2*Rint,
+    floor0 + Vfocus4[2] + Rint + Vfocus5[2] + Rext,
 ]) qlayer(x)];
 
-module wall_vee(size, span, a=64.5, side=undef) {
+module wall_vee(size, span, a=65, side=undef) {
     y0 = 0;
     y1 = floor0;
     y2 = size[2];
@@ -391,34 +391,25 @@ module map_tile_stack(color=undef) {
 function deck_box_volume(v) = [for (x=[  // round dimensions to even layers
     v[1] + 2*Rext,
     v[2] + 2*Rext,
-    v[0] + Rint + floor0]) qlayer(x)];
+    v[0] + Rext + floor0]) qlayer(x)];
 function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
     v[0] + 2*Rext,
     v[1] + 2*Rext,
-    v[2] + 2*Rint + floor0]) qlayer(x)];
+    v[2] + Rext + floor0]) qlayer(x)];
 
 // player focus decks: Gamegenic green sleeves
 Vdeck = vdeck(29, green_sleeve, premium_sleeve);
 Vdbox = deck_box_volume(Vdeck);
 module deck_box(color=undef) {
     module shell(block) {
-        linear_extrude(block[2]/2)
-            rounded_square(Rext, [block[0], block[1]]);
-        for (a=[0,180]) rotate(a) {
-            translate([block[0]/2-2*Rext, 0])
-                linear_extrude(block[2])
-                rounded_square(Rext, [4*Rext, block[1]]);
-            vee = [
-                [0, 0],
-                [block[0]/2-Rext, 0],
-                [block[0]/2-Rext, block[2]],
-                [block[0]/3-Rext, block[2]],
-            ];
-            rotate([90, 0, 0])
-                linear_extrude(block[1], center=true)
-                offset(r=Rext) offset(r=-Rext)
-                polygon(vee);
+        hv = qlayer(block[2]/3);
+        vv = [block[0], block[1], block[2]-hv+floor0];
+        intersection() {
+            linear_extrude(block[2])
+                rounded_square(Rext, [block[0], block[1]]);
+            raise(block[2]-vv[2]) wall_vee(vv, Dthumb);
         }
+        linear_extrude(hv) rounded_square(Rext, [block[0], block[1]]);
     }
     well = [Vdbox[0]-2*wall0, Vdbox[1]-2*wall0];
     color(color) difference() {
@@ -525,7 +516,7 @@ module organizer() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-*deck_box();
+deck_box();
 *leaders_card_tray();
 
-organizer();
+*organizer();
