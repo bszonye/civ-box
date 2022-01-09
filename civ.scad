@@ -40,6 +40,7 @@ $fs = min(layer_height/2, xspace(1)/2);
 
 inch = 25.4;
 card = [2.5*inch, 3.5*inch];  // standard playing card dimensions
+phi = (1+sqrt(5))/2;
 
 // Gamegenic sleeves
 sand_sleeve = [81, 122];  // Dixit
@@ -71,6 +72,11 @@ function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
     wide ? max(sleeve[0], sleeve[1]) : min(sleeve[0], sleeve[1]),
     wide ? min(sleeve[0], sleeve[1]) : max(sleeve[0], sleeve[1]),
     n*(quality+card)];
+
+// basic metrics
+wall0 = xwall(4);
+floor0 = qlayer(wall0);
+gap0 = 0.1;
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
 function diag2(x, y) = sqrt(x*x + y*y);
@@ -117,10 +123,6 @@ module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
     }
 }
 
-
-wall0 = xwall(4);
-floor0 = qlayer(wall0);
-gap0 = 0.1;
 
 // box metrics
 Vinterior = [288, 288, 69];  // box interior
@@ -199,23 +201,27 @@ Vfframe = [for (x=[  // round dimensions to even layers
     floor0 + Vfocus4[2] + Rint + Vfocus5[2] + Rext,
 ]) qlayer(x)];
 
-module wall_vee(size, span, a=65, side=undef) {
-    y0 = 0;
-    y1 = floor0;
+module wall_vee_cut(size, a=65, gap=gap0) {
+    span = size[0];
+    y0 = -2*Rext;
+    y1 = 0;
     y2 = size[2];
     rise = y2 - y1;
     run = rise/tan(a);
     x0 = span/2;
     x1 = x0 + run;
-    x2 = x1 + 2*Rext;
-    x3 = size[0]/2;
-    poly = [[x2, y0], [x2, y2], [x1, y2], [x0, y1], [x0, y0]];
-    draw = side ? [sign(side)] : [-1, +1];
-    for (s=draw) scale([s, 1, 1]) translate([0, size[1]/2]) rotate([90, 0, 0])
-            linear_extrude(size[1]) hull() {
-        offset(r=Rext) offset(r=-Rext) polygon(poly);
-        translate([x0, 0]) square([x3-x0, y1]);
-        translate([x3-gap0, 0]) square([gap0, y2]);
+    a1 = (180-a)/2;
+    echo(a, 180-a, a1);
+    x2 = x1 + Rext/tan(a1);
+    x3 = x2 + Rext;
+    poly = [[x3, y0], [x3, y2], [x1, y2], [x0, y1], [x0, y0]];
+    rotate([90, 0, 0]) linear_extrude(size[1]+2*gap, center=true)
+    difference() {
+        translate([0, y2/2+gap/2]) square([2*x2, y2+gap], center=true);
+        for (s=[-1,+1]) scale([s, 1]) hull() {
+            offset(r=Rext) offset(r=-Rext) polygon(poly);
+            translate([x0, y0-y1]) square([x3-x0, y1-y0]);
+        }
     }
 }
 
@@ -236,21 +242,23 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     xjoint = 1.5*inch;
     xspan = xspread + xjoint;
 
-    module shell(block, side) {
+    module shell(block) {
         color(color) {
             y0 = 0;
             y1 = Vfframe[1];
             x0 = Vfframe[0]/2 + Rext;
             x1 = x0 - Vfframe[1];
             x2 = x1 - 2*Rext;
-            x3 = Vfocus4[0]/2;
+            x3 = xjoint/2;
             corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
-            linear_extrude(Vfframe[2]) hull() {
-                offset(r=Rext) offset(r=-Rext) polygon(corner);
-                translate([x3, 0]) square(y1);
+            difference() {
+                linear_extrude(Vfframe[2]) hull() {
+                    offset(r=Rext) offset(r=-Rext) polygon(corner);
+                    translate([x3, 0]) square(y1);
+                }
+                translate([0, Vfframe[1]/2, floor0])
+                wall_vee_cut([xjoint, Vfframe[1], Vfframe[2]-floor0]);
             }
-            translate([0, Vfframe[1]/2])
-                wall_vee([f4well[0], Vfframe[1], Vfframe[2]], xjoint, side=+1);
         }
     }
     module joiner_tongue(groove=false) {
@@ -260,9 +268,8 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     }
     if (section) {  // half riser only
         side = sign(section);
-        // color(color)
-        scale([sign(section), 1]) difference() {
-            shell(Vfframe, side);
+        color(color) scale([sign(section), 1]) difference() {
+            shell(Vfframe);
             translate([0, Vfframe[1]/2]) raise() {
                 linear_extrude(Vfframe[2]) rounded_square(Rint, f4well);
                 raise(Vfocus4[2]+Rint)
@@ -400,22 +407,16 @@ function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
 // player focus decks: Gamegenic green sleeves
 Vdeck = vdeck(29, green_sleeve, premium_sleeve);
 Vdbox = deck_box_volume(Vdeck);
-module deck_box(color=undef) {
-    module shell(block) {
-        hv = qlayer(block[2]/3);
-        vv = [block[0], block[1], block[2]-hv+floor0];
-        intersection() {
-            linear_extrude(block[2])
-                rounded_square(Rext, [block[0], block[1]]);
-            raise(block[2]-vv[2]) wall_vee(vv, Dthumb);
-        }
-        linear_extrude(hv) rounded_square(Rext, [block[0], block[1]]);
-    }
-    well = [Vdbox[0]-2*wall0, Vdbox[1]-2*wall0];
+module deck_box(v=Vdeck, color=undef) {
+    vbox = deck_box_volume(v);
+    well = vbox - 2*[wall0, wall0];
+    vee = [Dthumb, vbox[1], qlayer(vbox[2]/phi)];
     color(color) difference() {
-        shell(Vdbox);
-        raise() linear_extrude(Vdbox[2])
+        linear_extrude(vbox[2])
+            rounded_square(Rext, [vbox[0], vbox[1]]);
+        raise() linear_extrude(vbox[2])
             rounded_square(Rint, [well[0], well[1]]);
+        raise(vbox[2]-vee[2]) wall_vee_cut(vee);
     }
     %raise(floor0 + Vdeck[0]/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
@@ -423,38 +424,40 @@ module deck_box(color=undef) {
 // leader sheets: thick card with Sleeve Kings super large sleeve
 Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 
-module card_tray(v, wide=false, color=undef) {
+module card_well(v, gap=gap0) {
+    vtray = card_tray_volume(v);
+    shell = [vtray[0], vtray[1]];
+    well = shell - 2*[wall0, wall0];
+    raise() linear_extrude(vtray[2]-floor0+gap)
+        rounded_square(Rint, well);
+    raise(-gap) linear_extrude(floor0+2*gap) {
+        // thumb round
+        intersection() {
+            translate([0, -vtray[1]/2]) stadium([Dthumb, Dthumb+2*wall0]);
+            square(shell + 2*[gap, gap], center=true);
+        }
+        // bottom round
+        // TODO: alternative for smaller trays
+        rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
+    }
+    raise() translate([0, wall0-vtray[1]]/2)
+        wall_vee_cut([Dthumb, wall0, vtray[2]-floor0], gap=gap);
+}
+
+module card_tray(v, color=undef) {
     // TODO: round height to a simple fraction of Hroom?
     vtray = card_tray_volume(v);
     shell = [vtray[0], vtray[1]];
     well = shell - [2*wall0, 2*wall0];
-    color(color) {
-        difference() {
-            linear_extrude(vtray[2]) rounded_square(Rext, shell);
-            raise() linear_extrude(vtray[2]) {  // well & front opening
-                rounded_square(Rint, well);
-                translate([0, -vtray[1]/2])
-                    square([vtray[0]-2*Rext, 2*wall0], center=true);
-            }
-            linear_extrude(3*floor0, center=true) {
-                // thumb round
-                translate([0, -vtray[1]/2]) hull() {
-                    translate([0, wall0]) circle(d=Dthumb);
-                    square([Dthumb, 2*wall0], center=true);
-                }
-                // bottom round
-                circle(d=min(well[0]/2, well[1]/2, well[1] - 2*Dthumb));
-            }
-        }
-        // wall notch
-        translate([0, wall0-vtray[1]]/2)
-            wall_vee([vtray[0]-2*Rext, wall0, vtray[2]], Dthumb);
+    color(color) difference() {
+        linear_extrude(vtray[2]) rounded_square(Rext, shell);
+        card_well(v);
     }
     // card stack
     %raise(floor0 + v[2]/2) cube(v, center=true);
 }
 module leaders_card_tray(color=undef) {
-    card_tray(Vleaders, wide=true, color=color);
+    card_tray(Vleaders, color=color);
 }
 
 module organizer() {
@@ -501,12 +504,30 @@ module organizer() {
     }
 }
 
-// test piece for tongue joint
-*intersection() {
-    focus_frame(+1);
-    translate([0, Vfframe[1]/2]) linear_extrude(5*floor0, center=true)
-        stadium([80, Vfframe[1] + gap0]);
+module test_tongue() {
+    *intersection() {
+        focus_frame(+1);
+        translate([0, Vfframe[1]/2]) linear_extrude(5*floor0, center=true)
+            stadium([80, Vfframe[1] + gap0]);
+    }
 }
+// tests for card trays
+module test_card_trays() {
+    vgreen1 = vdeck(18, green_sleeve, premium_sleeve, wide=false);
+    vgreen2 = vdeck(18, green_sleeve, premium_sleeve, wide=true);
+    vyellow1 = vdeck(18, yellow_sleeve, premium_sleeve, wide=false);
+    vyellow2 = vdeck(18, yellow_sleeve, premium_sleeve, wide=true);
+    *card_tray(vgreen1);
+    *card_tray(vgreen2);
+    *card_tray(vyellow1);
+    *card_tray(vyellow2);
+    vtray = card_tray_volume(Vleaders);
+    shell = [vtray[0], vtray[1]];
+    *card_tray(Vleaders);
+    card_well(Vleaders);
+
+}
+*test_card_trays();
 
 *focus_frame(+1);
 *focus_frame(-1);
@@ -516,7 +537,7 @@ module organizer() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-deck_box();
+*deck_box();
 *leaders_card_tray();
 
-*organizer();
+organizer();
