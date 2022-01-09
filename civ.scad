@@ -454,9 +454,18 @@ module card_well(v, gap=gap0) {
             translate([0, -vtray[1]/2]) stadium([Dthumb, Dthumb+2*wall0]);
             square(shell + 2*[gap, gap], center=true);
         }
-        // bottom round
-        // TODO: alternative for smaller trays
-        rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
+        // bottom hole
+        echo(well);
+        if (3*Dthumb < min(well[0], well[1])) {
+            rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
+        } else if (2.5*Dthumb < well[1]) {
+            dy = max(Dthumb, well[1] - 2*Dthumb);
+            translate([0, Dthumb/4]) stadium([Dthumb, dy]);
+        } else if (3.5*Dthumb < well[0]) {
+            dx = (well[0]-2*Dthumb)/2;
+            dy = (well[1]-2*Dthumb)/4;
+            for (i=[-1,+1]) translate([i*dx, dy]) circle(d=Dthumb);
+        }
     }
     raise() translate([0, wall0-vtray[1]]/2)
         wall_vee_cut([Dthumb, wall0, vtray[2]-floor0], gap=gap);
@@ -528,17 +537,15 @@ module test_card_trays() {
     vgreen2 = vdeck(18, green_sleeve, premium_sleeve, wide=true);
     vyellow1 = vdeck(18, yellow_sleeve, premium_sleeve, wide=false);
     vyellow2 = vdeck(18, yellow_sleeve, premium_sleeve, wide=true);
-    *card_tray(vgreen1);
-    *card_tray(vgreen2);
-    *card_tray(vyellow1);
-    *card_tray(vyellow2);
-    vtray = card_tray_volume(Vleaders);
-    shell = [vtray[0], vtray[1]];
-    *card_tray(Vleaders);
-    card_well(Vleaders);
+    card_tray(Vleaders);
+    translate([90+vgreen1[0]/2, 0]) card_tray(vgreen1);
+    translate([0, 75+vgreen2[1]/2]) card_tray(vgreen2);
+    translate([-90-vyellow1[0]/2, 0]) card_tray(vyellow1);
+    translate([0, -75-vyellow2[1]/2]) card_tray(vyellow2);
+    *card_well(Vleaders);
 
 }
-*test_card_trays();
+test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -549,7 +556,7 @@ module test_card_trays() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-deck_box();
+*deck_box();
 *leaders_card_tray();
 
 *organizer();
