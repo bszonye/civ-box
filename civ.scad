@@ -544,6 +544,7 @@ module card_well(v, gap=gap0) {
 
 module card_tray(v, color=undef) {
     // TODO: round height to a simple fraction of Hroom?
+    // TODO: round sizes up to convenient multiples (1mm, 5mm, etc)
     vtray = card_tray_volume(v);
     shell = [vtray[0], vtray[1]];
     well = shell - [2*wall0, 2*wall0];
@@ -555,6 +556,7 @@ module card_tray(v, color=undef) {
     %raise(floor0 + v[2]/2) cube(v, center=true);
 }
 module leaders_card_tray(color=undef) {
+    // TODO: expand this to exactly 135x110mm
     card_tray(Vleaders, color=color);
 }
 
