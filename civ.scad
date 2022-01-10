@@ -265,39 +265,23 @@ module focus_frame(section=undef, xspread=0, color=undef) {
         x0 = Vfframe[0]/2 + Rext;
         x1 = x0 - Vfframe[1];
         x2 = x1 - 2*Rext;
-        x3 = xjoint/2;
         corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
         color(color) scale([sign(section), 1]) difference() {
             // shell
             linear_extrude(Vfframe[2]) hull() {
                 offset(r=Rext) offset(r=-Rext) polygon(corner);
-                translate([x3, 0]) square(y1);
+                translate([xjoint/2, 0]) square(y1);
             }
             translate([0, Vfframe[1]/2, floor0]) {
-                // vee cut
                 wall_vee_cut([xjoint, Vfframe[1], Vfframe[2]-floor0]);
                 // focus bar wells
                 prism(Vfframe[2], f4well, r=Rint);
                 raise(Hshelf4) prism(Vfframe[2], f5well, r=Rint);
                 // bottom well taper
-                h1 = qlayer(1/6*Hshelf4);
-                h2 = qlayer(1/2*Hshelf4);
-                // leave a ledge wide enough to catch the top focus bars
-                xend = Vfocus5[2]*cos(45) + 2*Rint;
-                f4top = [f5well[0] - 2*xend, f5well[1]];
-                rise = Hshelf4-h1;
-                run = (f4top[0] - f4well[0]) / 2;
-                slope = rise/run;
-                echo(rise, run, slope, atan(slope));
-                xmid = 2 * (h2-h1)/slope;
-                f4mid = [f4well[0]+xmid, f4well[1]];
                 hull() {
-                    raise(h2) prism(Vfframe[2], f4mid, r=Rint);
+                    f4top = [f4well[0], f5well[1]];
+                    raise(Hshelf4/2) prism(Vfframe[2], f4well, r=Rint);
                     raise(Hshelf4) prism(Vfframe[2], f4top, r=Rint);
-                }
-                hull() {
-                    raise(h1) prism(Vfframe[2], f4well, r=Rint);
-                    raise(h2) prism(Vfframe[2], f4mid, r=Rint);
                 }
             }
             // joiner groove
@@ -565,7 +549,7 @@ module test_card_trays() {
 *test_card_trays();
 
 *focus_frame();
-*focus_frame(+1);
+focus_frame(+1);
 *focus_frame(-1);
 *focus_frame(0);
 *focus_frame(0, xspread=3);
@@ -573,7 +557,7 @@ module test_card_trays() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-deck_box();
+*deck_box();
 *leaders_card_tray();
 
 *organizer();
