@@ -280,10 +280,24 @@ module focus_frame(section=undef, xspread=0, color=undef) {
                 prism(Vfframe[2], f4well, r=Rint);
                 raise(Hshelf4) prism(Vfframe[2], f5well, r=Rint);
                 // bottom well taper
-                f4top = [f4well[0] + Hshelf4*cos(Avee), f5well[1]];
+                h1 = qlayer(1/6*Hshelf4);
+                h2 = qlayer(1/2*Hshelf4);
+                // leave a ledge wide enough to catch the top focus bars
+                xend = Vfocus5[2]*cos(45) + 2*Rint;
+                f4top = [f5well[0] - 2*xend, f5well[1]];
+                rise = Hshelf4-h1;
+                run = (f4top[0] - f4well[0]) / 2;
+                slope = rise/run;
+                echo(rise, run, slope, atan(slope));
+                xmid = 2 * (h2-h1)/slope;
+                f4mid = [f4well[0]+xmid, f4well[1]];
                 hull() {
-                    raise(1/2*Hshelf4) prism(Vfframe[2], f4well, r=Rint);
+                    raise(h2) prism(Vfframe[2], f4mid, r=Rint);
                     raise(Hshelf4) prism(Vfframe[2], f4top, r=Rint);
+                }
+                hull() {
+                    raise(h1) prism(Vfframe[2], f4well, r=Rint);
+                    raise(h2) prism(Vfframe[2], f4mid, r=Rint);
                 }
             }
             // joiner groove
@@ -545,7 +559,7 @@ module test_card_trays() {
     *card_well(Vleaders);
 
 }
-test_card_trays();
+*test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -559,4 +573,4 @@ test_card_trays();
 *deck_box();
 *leaders_card_tray();
 
-*organizer();
+organizer();
