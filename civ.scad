@@ -33,7 +33,10 @@ function qlayer(z=zlayer()) = zlayer(round(nlayer(z)));
 function clayer(z=zlayer()) = zlayer(ceil(nlayer(z)));
 function flayer(z=zlayer()) = zlayer(floor(nlayer(z)));
 
-tolerance = 0.001;
+epsilon = 0.01;
+function eround(x) = epsilon * round(x/epsilon);
+function eceil(x) = epsilon * ceil(x/epsilon);
+function efloor(x) = epsilon * floor(x/epsilon);
 
 $fa = 15;
 $fs = min(layer_height/2, xspace(1)/2);
@@ -279,14 +282,13 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     // wall thicknesses
     f5wall = wall0;
     f4wall = qwall((Vfocus5[1] - Vfocus4[1]) / 2 + wall0);
-    // well sizes (1mm longer than usual)
-    f5well = [Vfocus5[0] + 3*Rint, Vfframe[1] - 2*f5wall];
-    f4well = [Vfocus4[0] + 3*Rint, Vfframe[1] - 2*f4wall];
+    // well sizes
+    f5well = [Vfocus5[0] + 2*Rint, Vfframe[1] - 2*f5wall];
+    f4well = [Vfocus4[0] + 2*Rint, Vfframe[1] - 2*f4wall];
     // trestle lattice
-    dstrut = 2*qlayer(Rext);  // strut width
+    dstrut = 4.8;  // strut width
     rstrut = Rint;
     // space between sections
-    // TODO: calculate this number instead of measuring
     xjoint = 40;
     xspan = xspread + xjoint;
     // depth for cutting through Y axis
@@ -299,23 +301,26 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     }
     module lattice(i, j, half=false, tiers=2) {
         // make sure height is evenly divisible by 2, 3, 6 tiers
-        hlayers = 12*round(nlayer(Vfframe[2]-dstrut)/12);
+        hlayers = 6*round(nlayer(Vfframe[2]-dstrut)/6);
         htri = zlayer(hlayers / tiers); // trestle height
-        echo(nlayer(Vfframe[2]), nlayer(Vfframe[2]-dstrut), hlayers);
-        dtri = 2*htri/tan(Avee);  // trestle width (triangle base)
+        dtri = 2*eround(htri/tan(Avee));  // trestle width (triangle base)
         tfull = [[dtri/2, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
         thalf = [[0, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
-        echo(dtri, dstrut);
+        xstrut = eround(dstrut/2 / sin(Avee));
         z0 = qlayer(Vfframe[2] - htri*tiers) / 2;
-        x0 = xjoint/2 + (z0 - floor0) / tan(Avee) + dstrut/2/sin(Avee);
+        x0 = eround((z0 - floor0) / tan(Avee)) + xstrut;
         y0 = dycut - gap0;
-        origin = [x0, y0, z0];
+        origin = [xjoint/2 + x0, y0, z0];
         flip = 1 - (2 * (i % 2));
-        echo(origin, dstrut);
         translate(origin + [(i+j+1)/2*dtri, 0, (j+1/2)*htri])
             scale([1, 1, flip]) rotate([90, 0, 0]) linear_extrude(dycut)
             offset(r=rstrut) offset(r=-dstrut/2-rstrut)
             polygon(half ? thalf : tfull);
+        // TODO: clean this up
+        xwell4 = (f4well[0]/2 - origin[0]);
+        ntri4 = floor(2*xwell4/dtri)/2;
+        otri4 = xwell4 - ntri4*dtri;
+        echo(ntri4, otri4, dtri/2-otri4, xjoint);
     }
     module riser() {
         side = sign(section);
@@ -349,19 +354,8 @@ module focus_frame(section=undef, xspread=0, color=undef) {
             // trestle lattice
             union() {  // 1 tier
                 for (i=[0:5]) lattice(i, 0, tiers=1);
-                for (i=[12:13]) lattice(i, 1);
-                for (i=[12:14]) lattice(i, 0);
-                *for (i=[0:4]) lattice(i, 0, tiers=1);
-                *for (i=[9:13]) lattice(i, 1);
-                *lattice(11, 0);
-                lattice(14, 1, half=true);
-                lattice(15, 0, half=true);
-            }
-            *union() {  // 2 tiers
-                for (i=[0:11]) lattice(i, 0);
-                lattice(12, 0, half=true);
-                for (i=[0:13]) lattice(i, 1);
-                lattice(14, 1, half=true);
+                *for (i=[12:13]) lattice(i, 1);
+                *for (i=[13:14]) lattice(i, 0);
             }
             // joiner groove
             joiner_tongue(groove=true);
@@ -569,7 +563,7 @@ module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
     %color("#101080", 0.25) box(Vinterior, frame=true);
-    %color("#101080", 0.1) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
+    *%color("#101080", 0.1) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
         raise(Vinterior[2]-Vmanual1[2]-Vmanual2[2]) {
             cube(Vmanual1);
             raise(Vmanual2[2]) cube(Vmanual2);
@@ -617,7 +611,7 @@ module test_card_trays() {
 }
 *test_card_trays();
 
-focus_frame();
+*focus_frame();
 *focus_frame(+1);
 *focus_frame(-1);
 *focus_frame(0);
@@ -629,4 +623,4 @@ focus_frame();
 *deck_box();
 *leaders_card_tray();
 
-*organizer();
+organizer();
