@@ -206,22 +206,21 @@ Vfframe = [for (x=[  // round dimensions to even layers
 module wall_vee_cut(size, a=Avee, gap=gap0) {
     span = size[0];
     y0 = -2*Rext;
-    y1 = 0;
-    y2 = size[2];
-    rise = y2 - y1;
+    y1 = size[2];
+    rise = y1;
     run = rise/tan(a);
     x0 = span/2;
     x1 = x0 + run;
     a1 = (180-a)/2;
     x2 = x1 + Rext/tan(a1);
     x3 = x2 + Rext;
-    poly = [[x3, y0], [x3, y2], [x1, y2], [x0, y1], [x0, y0]];
+    poly = [[x3, y0], [x3, y1], [x1, y1], [x0, 0], [x0, y0]];
     rotate([90, 0, 0]) linear_extrude(size[1]+2*gap, center=true)
     difference() {
-        translate([0, y2/2+gap/2]) square([2*x2, y2+gap], center=true);
+        translate([0, y1/2+gap/2]) square([2*x2, y1+gap], center=true);
         for (s=[-1,+1]) scale([s, 1]) hull() {
             offset(r=Rext) offset(r=-Rext) polygon(poly);
-            translate([x0, y0-y1]) square([x3-x0, y1-y0]);
+            translate([x0, y0]) square([x3-x0, -y0]);
         }
     }
 }
@@ -249,14 +248,31 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     // well sizes (1mm longer than usual)
     f5well = [Vfocus5[0] + 3*Rint, Vfframe[1] - 2*f5wall];
     f4well = [Vfocus4[0] + 3*Rint, Vfframe[1] - 2*f4wall];
+    // trestle lattice
+    dstrut = qlayer(2*Rext);  // strut width
+    tiers = 2;
+    htri = flayer((Vfframe[2] - dstrut) / tiers);  // trestle height
+    dtri = 2*htri/tan(Avee);  // trestle width (triangle base)
+    tfull = [[dtri/2, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
+    thalf = [[0, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
+    echo(dtri);
     // space between sections
-    xjoint = 1.5*inch;
+    // TODO: calculate this number instead of measuring
+    xjoint = 40;
     xspan = xspread + xjoint;
+    // depth for cutting through Y axis
+    dycut = Vfframe[1] + 2*gap0;
 
     module joiner_tongue(groove=false) {
         d = Vfframe[1]/2;
         top = [xspan + 3*d, d];
         translate([0, Vfframe[1]/2]) tongue(top, groove=groove);
+    }
+    module lattice(i, j, half=false) {
+        flip = 1 - (2 * (i % 2));
+        translate([(i+j+1)/2*dtri, 0, (j+1/2)*htri])
+            scale([1, 1, flip]) rotate([90, 0, 0]) linear_extrude(dycut)
+            offset(r=Rint) offset(r=-dstrut/2) polygon(half ? thalf : tfull);
     }
     module riser() {
         side = sign(section);
@@ -279,10 +295,25 @@ module focus_frame(section=undef, xspread=0, color=undef) {
                 raise(Hshelf4) prism(Vfframe[2], f5well, r=Rint);
                 // bottom well taper
                 hull() {
+                    taper = (f5well[1] - f4well[1]) / 2;
+                    rise = taper * tan(Avee);
+                    htaper = Hshelf4-rise/2;
+                    echo(rise, htaper);
                     f4top = [f4well[0], f5well[1]];
-                    raise(Hshelf4/2) prism(Vfframe[2], f4well, r=Rint);
-                    raise(Hshelf4) prism(Vfframe[2], f4top, r=Rint);
+                    raise(htaper-rise/2) prism(Vfframe[2], f4well, r=Rint);
+                    raise(htaper+rise/2) prism(Vfframe[2], f4top, r=Rint);
                 }
+            }
+            // trestle lattice
+            z0 = qlayer(Vfframe[2] - htri*tiers) / 2;
+            x0 = xjoint/2 + (z0 - floor0) / tan(Avee) + dstrut/2/sin(Avee);
+            y0 = dycut - gap0;
+            origin = [x0, y0, z0];
+            translate(origin) {
+                for (i=[0:11]) lattice(i, 0);
+                lattice(12, 0, half=true);
+                for (i=[0:13]) lattice(i, 1);
+                lattice(14, 1, half=true);
             }
             // joiner groove
             joiner_tongue(groove=true);
