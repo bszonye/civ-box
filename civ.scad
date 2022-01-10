@@ -164,7 +164,8 @@ Vfocus4 = [309, 4*Hboard, 21.6];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
 Hroom = floor(Vinterior[2] - Vmanual1[2] - Vmanual2[2]);
-Hlayer = Hroom/2;
+function tier_height(k) = k ? flayer(Hroom/k) : Vinterior[2];
+function tier_fit(z) = tier_height(floor(Hroom/z));
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -320,7 +321,7 @@ module focus_frame(section=undef, xspread=0, color=undef) {
         xwell4 = (f4well[0]/2 - origin[0]);
         ntri4 = floor(2*xwell4/dtri)/2;
         otri4 = xwell4 - ntri4*dtri;
-        echo(ntri4, otri4, dtri/2-otri4, xjoint);
+        // echo(ntri4, otri4, dtri/2-otri4, xjoint);
     }
     module riser() {
         side = sign(section);
@@ -352,11 +353,9 @@ module focus_frame(section=undef, xspread=0, color=undef) {
                 }
             }
             // trestle lattice
-            union() {  // 1 tier
-                for (i=[0:5]) lattice(i, 0, tiers=1);
-                *for (i=[12:13]) lattice(i, 1);
-                *for (i=[13:14]) lattice(i, 0);
-            }
+            for (i=[0:5]) lattice(i, 0, tiers=1);
+            *for (i=[12:13]) lattice(i, 1);
+            *for (i=[13:14]) lattice(i, 0);
             // joiner groove
             joiner_tongue(groove=true);
         }
@@ -589,9 +588,30 @@ module organizer() {
     }
     // everything above the bar
     rotate(-45) translate([0, Rext+gap0]) {
-        translate([0, card_tray_volume(Vleaders)[0]/2]) rotate(90)
+        translate([0, card_tray_volume(Vleaders)[1]/2]) rotate(180)
             leaders_card_tray(color=player_colors[0]);
-        // TODO
+        // TODO: wonders
+        // TODO: barbarians
+        // TODO: city states
+        // TODO: resources
+        // TODO: turn this into a working player tray
+        points = [
+            [[107, 40], 135, 2],
+            [[-107, 40], -135, 5],
+            [[0, 147.5], 0, 3],
+        ];
+        echo(card_tray_volume(Vleaders), diag2(Vinterior[0], Vinterior[1])/2);
+        for (p=points) translate(p[0]) rotate(p[1]) {
+            color(player_colors[p[2]]) translate([0, 18])
+                linear_extrude(tier_height(2)) circle(d=50);
+            color(player_colors[0])
+                linear_extrude(tier_height(2)-Rext) circle(d=75);
+            linear_extrude(tier_height(2)-2*Rext) hull() {
+                translate([0, 18]) circle(d=50);
+                circle(d=75);
+                translate([0, -26]) square([135, 23], center=true);
+            }
+        }
     }
 }
 
