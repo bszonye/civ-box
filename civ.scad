@@ -442,13 +442,16 @@ Vdbox = deck_box_volume(Vdeck);
 module deck_box(v=Vdeck, color=undef) {
     vbox = deck_box_volume(v);
     well = vbox - 2*[wall0, wall0];
-    vee = [Dthumb, vbox[1], qlayer(vbox[2]/phi)];
+    // notch dimensions:
+    hvee = qlayer(vbox[2]/2);  // half the height of the box
+    dvee = 2*hvee*cos(Avee);  // point of the vee exactly at the base
+    vee = [dvee, vbox[1], vbox[2]-hvee];
     color(color) difference() {
         linear_extrude(vbox[2])
             rounded_square(Rext, [vbox[0], vbox[1]]);
         raise() linear_extrude(vbox[2])
             rounded_square(Rint, [well[0], well[1]]);
-        raise(vbox[2]-vee[2]) wall_vee_cut(vee);
+        raise(hvee) wall_vee_cut(vee);
     }
     %raise(floor0 + Vdeck[0]/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
@@ -570,7 +573,7 @@ module test_card_trays() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
-*deck_box();
+deck_box();
 *leaders_card_tray();
 
-organizer();
+*organizer();
