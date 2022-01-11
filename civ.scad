@@ -72,8 +72,8 @@ double_sleeve = 0.3;  // premium sleeve + inner sleeve
 function card_count(h, quality=no_sleeve, card=playing_card) =
     floor(d / (card + quality));
 function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
-    wide ? max(sleeve[0], sleeve[1]) : min(sleeve[0], sleeve[1]),
-    wide ? min(sleeve[0], sleeve[1]) : max(sleeve[0], sleeve[1]),
+    wide ? max(sleeve.x, sleeve.y) : min(sleeve.x, sleeve.y),
+    wide ? min(sleeve.x, sleeve.y) : max(sleeve.x, sleeve.y),
     n*(quality+card)];
 
 // basic metrics
@@ -95,14 +95,14 @@ module rounded_square(r, size) {
 module stadium(size) {
     if (is_list(size)) {
         hull() {
-            if (size[0] < size[1]) {
-                d = size[0];
-                a = [d, size[1]-d];
-                for (i=[-1,+1]) translate([0, i*a[1]/2]) circle(d=d);
+            if (size.x < size.y) {
+                d = size.x;
+                a = [d, size.y-d];
+                for (i=[-1,+1]) translate([0, i*a.y/2]) circle(d=d);
             } else {
-                d = size[1];
-                a = [size[0]-d, d];
-                for (i=[-1,+1]) translate([i*a[0]/2, 0]) circle(d=d);
+                d = size.y;
+                a = [size.x-d, d];
+                for (i=[-1,+1]) translate([i*a.x/2, 0]) circle(d=d);
             }
         }
     } else stadium([size, size]);
@@ -132,9 +132,9 @@ Hwrap0 = 53;  // cover art wrap ends here
 Hwrap1 = 56;  // avoid stacks between 53-56mm total height
 module box(size, wall=1, frame=false, a=0) {
     vint = is_list(size) ? size : [size, size, size];
-    vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
-    vcut = [vint[0], vint[1], vint[2] - wall];
-    origin = [0, 0, vext[2]/2 - wall];
+    vext = [vint.x + 2*wall, vint.y + 2*wall, vint.z + wall];
+    vcut = [vint.x, vint.y, vint.z - wall];
+    origin = [0, 0, vext.z/2 - wall];
     translate(origin) rotate(a) {
         difference() {
             cube(vext, center=true);  // exterior
@@ -145,10 +145,10 @@ module box(size, wall=1, frame=false, a=0) {
                     translate(2*i*unit_axis(n)*wall) cube(vcut, center=true);
             }
         }
-        raise(Hwrap0 + wall-vext[2]/2)
+        raise(Hwrap0 + wall-vext.z/2)
             linear_extrude(Hwrap1-Hwrap0) difference() {
-            square([vint[0]+wall, vint[1]+wall], center=true);
-            square([vint[0], vint[1]], center=true);
+            square([vint.x+wall, vint.y+wall], center=true);
+            square([vint.x, vint.y], center=true);
         }
     }
 }
@@ -163,12 +163,12 @@ Vfocus5 = [371, 5*Hboard, 21.2];
 Vfocus4 = [309, 4*Hboard, 21.6];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
-Hroom = ceil(Vinterior[2] - Vmanual1[2] - Vmanual2[2]) - 1;
-function tier_height(k) = k ? flayer(Hroom/k) : Vinterior[2];
+Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
+function tier_height(k) = k ? flayer(Hroom/k) : Vinterior.z;
 function tier_fit(z) = tier_height(floor(Hroom/z));
 for (i=[0:6]) echo("tier", i, tier_height(i), i*tier_height(i));
-echo(clayer(Vfocus5[1]+Rint+floor0), clayer(Vfocus4[1]+Rint+floor0));
-echo(tier_fit(Vfocus5[1]+Rint+floor0), tier_fit(Vfocus4[1]+Rint+floor0));
+echo(clayer(Vfocus5.y+Rint+floor0), clayer(Vfocus4.y+Rint+floor0));
+echo(tier_fit(Vfocus5.y+Rint+floor0), tier_fit(Vfocus4.y+Rint+floor0));
 echo(1.5*tier_height(4));
 echo("maps", Hroom - stack_height([Nplayers, Nmaps], lid=false, plug=false));
 
@@ -213,18 +213,18 @@ Ghole = [
 ];
 
 Avee = 65;
-Hshelf4 = Vfocus4[2] + Rint;
-Hshelf5 = Vfocus5[2] + Rext;
+Hshelf4 = Vfocus4.z + Rint;
+Hshelf5 = Vfocus5.z + Rext;
 Vfframe = [for (x=[  // round dimensions to even layers
-    diag2(Vinterior[0], Vinterior[1]),
-    max(Vfocus4[1], Vfocus5[1]) + 2*Rext - Rint,  // 1mm narrower than usual
+    diag2(Vinterior.x, Vinterior.y),
+    max(Vfocus4.y, Vfocus5.y) + 2*Rext - Rint,  // 1mm narrower than usual
     floor0 + Hshelf4 + Hshelf5,
 ]) qlayer(x)];
 
 module wall_vee_cut(size, a=Avee, gap=gap0) {
-    span = size[0];
+    span = size.x;
     y0 = -2*Rext;
-    y1 = size[2];
+    y1 = size.z;
     rise = y1;
     run = rise/tan(a);
     x0 = span/2;
@@ -233,7 +233,7 @@ module wall_vee_cut(size, a=Avee, gap=gap0) {
     x2 = x1 + Rext/tan(a1);
     x3 = x2 + Rext;
     poly = [[x3, y0], [x3, y1], [x1, y1], [x0, 0], [x0, y0]];
-    rotate([90, 0, 0]) linear_extrude(size[1]+2*gap, center=true)
+    rotate([90, 0, 0]) linear_extrude(size.y+2*gap, center=true)
     difference() {
         translate([0, y1/2+gap/2]) square([2*x2, y1+gap], center=true);
         for (s=[-1,+1]) scale([s, 1]) hull() {
@@ -254,25 +254,25 @@ module prism(h, shape=1, r=0, scale=1) {
 }
 
 module focus_bar(v, color=5) {
-    k = floor(v[0] / 60);
+    k = floor(v.x / 60);
     module focus(n, cut=false) {
         origin = [-60 * (k+1)/2, 0];
         translate(origin + [60 * n, 0]) if (cut) {
-            cube([50, 2*v[1], 12], center=true);
+            cube([50, 2*v.y, 12], center=true);
         } else {
             difference() {
-                color("tan", 0.5) cube([50, v[1], 12], center=true);
-                cube([48, 2*v[1], 10], center=true);
+                color("tan", 0.5) cube([50, v.y, 12], center=true);
+                cube([48, 2*v.y, 10], center=true);
             }
-            color("olivedrab", 0.5) cube([48, v[1], 10], center=true);
+            color("olivedrab", 0.5) cube([48, v.y, 10], center=true);
         }
     }
     difference() {
         color("tan", 0.5) cube(v, center=true);
-        cube([k*60, 2*v[1], 16], center=true);
+        cube([k*60, 2*v.y, 16], center=true);
     }
     color(is_num(color) ? player_colors[color] : color, 0.5) difference() {
-        cube([k*60, v[1], 16], center=true);
+        cube([k*60, v.y, 16], center=true);
         for (n=[1:k]) focus(n, cut=true);
     }
     for (n=[1:k]) focus(n);
@@ -287,10 +287,10 @@ module focus_frame(section=undef, xspread=0, color=undef) {
 
     // wall thicknesses
     f5wall = wall0;
-    f4wall = qwall((Vfocus5[1] - Vfocus4[1]) / 2 + wall0);
+    f4wall = qwall((Vfocus5.y - Vfocus4.y) / 2 + wall0);
     // well sizes
-    f5well = [Vfocus5[0] + 2*Rint, Vfframe[1] - 2*f5wall];
-    f4well = [Vfocus4[0] + 2*Rint, Vfframe[1] - 2*f4wall];
+    f5well = [Vfocus5.x + 2*Rint, Vfframe.y - 2*f5wall];
+    f4well = [Vfocus4.x + 2*Rint, Vfframe.y - 2*f4wall];
     // trestle lattice
     dstrut = 4.8;  // strut width
     rstrut = Rint;
@@ -298,22 +298,22 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     xjoint = 40;
     xspan = xspread + xjoint;
     // depth for cutting through Y axis
-    dycut = Vfframe[1] + 2*gap0;
+    dycut = Vfframe.y + 2*gap0;
 
     module joiner_tongue(groove=false) {
-        d = Vfframe[1]/2;
+        d = Vfframe.y/2;
         top = [xspan + 3*d, d];
-        translate([0, Vfframe[1]/2]) tongue(top, groove=groove);
+        translate([0, Vfframe.y/2]) tongue(top, groove=groove);
     }
     module lattice(i, j, half=false, tiers=2) {
         // make sure height is evenly divisible by 2, 3, 6 tiers
-        hlayers = 6*round(nlayer(Vfframe[2]-dstrut)/6);
+        hlayers = 6*round(nlayer(Vfframe.z-dstrut)/6);
         htri = zlayer(hlayers / tiers); // trestle height
         dtri = 2*eround(htri/tan(Avee));  // trestle width (triangle base)
         tfull = [[dtri/2, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
         thalf = [[0, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
         xstrut = eround(dstrut/2 / sin(Avee));
-        z0 = qlayer(Vfframe[2] - htri*tiers) / 2;
+        z0 = qlayer(Vfframe.z - htri*tiers) / 2;
         x0 = eround((z0 - floor0) / tan(Avee)) + xstrut;
         y0 = dycut - gap0;
         origin = [xjoint/2 + x0, y0, z0];
@@ -323,7 +323,7 @@ module focus_frame(section=undef, xspread=0, color=undef) {
             offset(r=rstrut) offset(r=-dstrut/2-rstrut)
             polygon(half ? thalf : tfull);
         // TODO: clean this up
-        xwell4 = (f4well[0]/2 - origin[0]);
+        xwell4 = (f4well.x/2 - origin.x);
         ntri4 = floor(2*xwell4/dtri)/2;
         otri4 = xwell4 - ntri4*dtri;
         // echo(ntri4, otri4, dtri/2-otri4, xjoint);
@@ -331,30 +331,30 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     module riser() {
         side = sign(section);
         y0 = 0;
-        y1 = Vfframe[1];
-        x0 = Vfframe[0]/2 + Rext;
-        x1 = x0 - Vfframe[1];
+        y1 = Vfframe.y;
+        x0 = Vfframe.x/2 + Rext;
+        x1 = x0 - Vfframe.y;
         x2 = x1 - 2*Rext;
         corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
         color(color) scale([sign(section), 1]) difference() {
             // shell
-            linear_extrude(Vfframe[2]) hull() {
+            linear_extrude(Vfframe.z) hull() {
                 offset(r=Rext) offset(r=-Rext) polygon(corner);
                 translate([xjoint/2, 0]) square(y1);
             }
-            translate([0, Vfframe[1]/2, floor0]) {
-                wall_vee_cut([xjoint, Vfframe[1], Vfframe[2]-floor0]);
+            translate([0, Vfframe.y/2, floor0]) {
+                wall_vee_cut([xjoint, Vfframe.y, Vfframe.z-floor0]);
                 // focus bar wells
-                prism(Vfframe[2], f4well, r=Rint);
-                raise(Hshelf4) prism(Vfframe[2], f5well, r=Rint);
+                prism(Vfframe.z, f4well, r=Rint);
+                raise(Hshelf4) prism(Vfframe.z, f5well, r=Rint);
                 // bottom well taper
                 hull() {
-                    taper = (f5well[1] - f4well[1]) / 2;
+                    taper = (f5well.y - f4well.y) / 2;
                     rise = taper * tan(Avee);
                     htaper = Hshelf4-rise/2;
-                    f4top = [f4well[0], f5well[1]];
-                    raise(htaper-rise/2) prism(Vfframe[2], f4well, r=Rint);
-                    raise(htaper+rise/2) prism(Vfframe[2], f4top, r=Rint);
+                    f4top = [f4well.x, f5well.y];
+                    raise(htaper-rise/2) prism(Vfframe.z, f4well, r=Rint);
+                    raise(htaper+rise/2) prism(Vfframe.z, f4top, r=Rint);
                 }
             }
             // trestle lattice
@@ -371,8 +371,8 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     } else if (section == 0) {
         // joiner only
         color(color) {
-            translate([0, Vfframe[1]/2]) linear_extrude(floor0)
-                square([xspan-gap0, Vfframe[1]], center=true);
+            translate([0, Vfframe.y/2]) linear_extrude(floor0)
+                square([xspan-gap0, Vfframe.y], center=true);
             joiner_tongue();
         }
     } else {
@@ -380,22 +380,22 @@ module focus_frame(section=undef, xspread=0, color=undef) {
         focus_frame(+1, color=color);
         focus_frame(-1, color=color);
         color(color) {
-            translate([0, Vfframe[1]/2]) linear_extrude(floor0) {
-                square([xjoint*3+2*gap0, Vfframe[1]], center=true);
+            translate([0, Vfframe.y/2]) linear_extrude(floor0) {
+                square([xjoint*3+2*gap0, Vfframe.y], center=true);
             }
         }
         // ghost focus bars
-        %translate([0, Vfframe[1]/2]) raise() {
-            raise(Vfocus4[2]/2) focus_bar(Vfocus4);
-            raise(Vfocus4[2] + Rint + Vfocus5[2]/2) focus_bar(Vfocus5);
+        %translate([0, Vfframe.y/2]) raise() {
+            raise(Vfocus4.z/2) focus_bar(Vfocus4);
+            raise(Vfocus4.z + Rint + Vfocus5.z/2) focus_bar(Vfocus5);
         }
     }
 }
 
 function hex_grid(x, y, r=Rhex) = [r*x, sin(60)*r*y];
-function hex_points(grid=Ghex, r=Rhex) = [for (i=grid) hex_grid(i[0],i[1],r)];
+function hex_points(grid=Ghex, r=Rhex) = [for (i=grid) hex_grid(i.x,i.y,r)];
 function hex_min(grid=Ghex, r=Rhex) =
-    hex_grid(min([for (i=grid) i[0]]), min([for (i=grid) i[1]]), r);
+    hex_grid(min([for (i=grid) i.x]), min([for (i=grid) i.y]), r);
 
 module hex_poly(grid=Ghex, r=Rhex) {
     polygon(hex_points(grid, r));
@@ -488,13 +488,13 @@ module map_tile_stack(color=undef) {
 }
 
 function deck_box_volume(v) = [for (x=[  // round dimensions to even layers
-    v[1] + 2*Rext,
-    v[2] + 2*Rext,
-    v[0] + Rext + floor0]) qlayer(x)];
+    v.y + 2*Rext,
+    v.z + 2*Rext,
+    v.x + Rext + floor0]) qlayer(x)];
 function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
-    v[0] + 2*Rext,
-    v[1] + 2*Rext,
-    v[2] + Rext + floor0]) qlayer(x)];
+    v.x + 2*Rext,
+    v.y + 2*Rext,
+    v.z + Rext + floor0]) qlayer(x)];
 
 // player focus decks: Gamegenic green sleeves
 Vdeck = vdeck(29, green_sleeve, premium_sleeve);
@@ -503,17 +503,17 @@ module deck_box(v=Vdeck, color=undef) {
     vbox = deck_box_volume(v);
     well = vbox - 2*[wall0, wall0];
     // notch dimensions:
-    hvee = qlayer(vbox[2]/2);  // half the height of the box
+    hvee = qlayer(vbox.z/2);  // half the height of the box
     dvee = 2*hvee*cos(Avee);  // point of the vee exactly at the base
-    vee = [dvee, vbox[1], vbox[2]-hvee];
+    vee = [dvee, vbox.y, vbox.z-hvee];
     color(color) difference() {
-        linear_extrude(vbox[2])
-            rounded_square(Rext, [vbox[0], vbox[1]]);
-        raise() linear_extrude(vbox[2])
-            rounded_square(Rint, [well[0], well[1]]);
+        linear_extrude(vbox.z)
+            rounded_square(Rext, [vbox.x, vbox.y]);
+        raise() linear_extrude(vbox.z)
+            rounded_square(Rint, [well.x, well.y]);
         raise(hvee) wall_vee_cut(vee);
     }
-    %raise(floor0 + Vdeck[0]/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
+    %raise(floor0 + Vdeck.x/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
 
 // leader sheets: thick card with Sleeve Kings super large sleeve
@@ -521,44 +521,44 @@ Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 
 module card_well(v, gap=gap0) {
     vtray = card_tray_volume(v);
-    shell = [vtray[0], vtray[1]];
+    shell = [vtray.x, vtray.y];
     well = shell - 2*[wall0, wall0];
-    raise() linear_extrude(vtray[2]-floor0+gap)
+    raise() linear_extrude(vtray.z-floor0+gap)
         rounded_square(Rint, well);
     raise(-gap) linear_extrude(floor0+2*gap) {
         // thumb round
         intersection() {
-            translate([0, -vtray[1]/2]) stadium([Dthumb, Dthumb+2*wall0]);
+            translate([0, -vtray.y/2]) stadium([Dthumb, Dthumb+2*wall0]);
             square(shell + 2*[gap, gap], center=true);
         }
         // bottom hole
-        if (3*Dthumb < min(well[0], well[1])) {
+        if (3*Dthumb < min(well.x, well.y)) {
             rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
-        } else if (2.5*Dthumb < well[1]) {
-            dy = max(Dthumb, well[1] - 2*Dthumb);
+        } else if (2.5*Dthumb < well.y) {
+            dy = max(Dthumb, well.y - 2*Dthumb);
             translate([0, Dthumb/4]) stadium([Dthumb, dy]);
-        } else if (3.5*Dthumb < well[0]) {
-            dx = (well[0]-2*Dthumb)/2;
-            dy = (well[1]-2*Dthumb)/4;
+        } else if (3.5*Dthumb < well.x) {
+            dx = (well.x-2*Dthumb)/2;
+            dy = (well.y-2*Dthumb)/4;
             for (i=[-1,+1]) translate([i*dx, dy]) circle(d=Dthumb);
         }
     }
-    raise() translate([0, wall0-vtray[1]]/2)
-        wall_vee_cut([Dthumb, wall0, vtray[2]-floor0], gap=gap);
+    raise() translate([0, wall0-vtray.y]/2)
+        wall_vee_cut([Dthumb, wall0, vtray.z-floor0], gap=gap);
 }
 
 module card_tray(v, color=undef) {
     // TODO: round height to a simple fraction of Hroom?
     // TODO: round sizes up to convenient multiples (1mm, 5mm, etc)
     vtray = card_tray_volume(v);
-    shell = [vtray[0], vtray[1]];
+    shell = [vtray.x, vtray.y];
     well = shell - [2*wall0, 2*wall0];
     color(color) difference() {
-        linear_extrude(vtray[2]) rounded_square(Rext, shell);
+        linear_extrude(vtray.z) rounded_square(Rext, shell);
         card_well(v);
     }
     // card stack
-    %raise(floor0 + v[2]/2) cube(v, center=true);
+    %raise(floor0 + v.z/2) cube(v, center=true);
 }
 module leaders_card_tray(color=undef) {
     // TODO: expand this to exactly 135x110mm
@@ -569,33 +569,39 @@ module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
     %color("#101080", 0.25) box(Vinterior, frame=true);
-    %color("#101080", 0.05) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
+    %color("#101080", 0.05) translate([-Vinterior.x/2, -Vinterior.y/2]) {
         raise(Hroom) {
             cube(Vmanual1);
-            raise(Vmanual2[2]) cube(Vmanual2);
+            raise(Vmanual2.z) cube(Vmanual2);
         }
     }
     // focus frame bar and everything below
     rotate(135) translate([0, -Rext]) {
+        // common deck boxes
+        rotate(-45)
+            translate([Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
+            deck_box(color=player_colors[0]);
+        rotate(45)
+            translate([-Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
+            deck_box(color="#202020");
         // focus bars
         focus_frame(color=player_colors[0]);
-        translate([0, Vfframe[1]+gap0]) {
+        translate([0, Vfframe.y+gap0]) {
             // player deck boxes
-            deltadb = [Vdbox[0]+gap0, Vdbox[1]+gap0];
-            player = [2, 3, 4, 1, 0, 5];
-            translate([0, Vdbox[1]/2])
+            deltadb = [Vdbox.x+gap0, Vdbox.y+gap0];
+            translate([0, Vdbox.y/2]) for (player=[1:5])
                 for (x=[-1, 0, +1]) for (y=[0, 1])
-                translate([x*deltadb[0], y*deltadb[1], 0])
-                    deck_box(color=player_colors[player[3*y+x+1]]);
+                translate([(3-player)/2*deltadb.x, (1-player%2)*deltadb.y, 0])
+                    deck_box(color=player_colors[player]);
             // map tiles
             ystack = 5*Rhex + 2*Rext;
-            translate([0, 2*deltadb[1]+ystack/2]) rotate(-90)
+            translate([0, 2*deltadb.y+ystack/2]) rotate(-90)
                 map_tile_stack(color=player_colors[0]);
         }
     }
     // everything above the bar
     rotate(-45) translate([0, Rext+gap0]) {
-        translate([0, card_tray_volume(Vleaders)[1]/2]) rotate(180)
+        translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
             leaders_card_tray(color=player_colors[0]);
         // TODO: wonders
         // TODO: barbarians
@@ -621,9 +627,9 @@ module organizer() {
             [[0, y4+y5], 0, 3],
         ];
         echo(card_tray_volume(Vleaders));
-        echo(tier_fit(card_tray_volume(Vleaders)[2]));
-        echo(diag2(Vinterior[0], Vinterior[1])/2);
-        echo(diag2(Vinterior[0], Vinterior[1])/inch);
+        echo(tier_fit(card_tray_volume(Vleaders).z));
+        echo(diag2(Vinterior.x, Vinterior.y)/2);
+        echo(diag2(Vinterior.x, Vinterior.y)/inch);
         for (p=points) translate(p[0]) rotate(p[1]) {
             prism(tier_height(2), pentabox, r=Rext);
             *color(player_colors[p[2]]) translate([0, 18])
@@ -646,10 +652,10 @@ module test_card_trays() {
     vyellow1 = vdeck(18, yellow_sleeve, premium_sleeve, wide=false);
     vyellow2 = vdeck(18, yellow_sleeve, premium_sleeve, wide=true);
     card_tray(Vleaders);
-    translate([90+vgreen1[0]/2, 0]) card_tray(vgreen1);
-    translate([0, 75+vgreen2[1]/2]) card_tray(vgreen2);
-    translate([-90-vyellow1[0]/2, 0]) card_tray(vyellow1);
-    translate([0, -75-vyellow2[1]/2]) card_tray(vyellow2);
+    translate([90+vgreen1.x/2, 0]) card_tray(vgreen1);
+    translate([0, 75+vgreen2.y/2]) card_tray(vgreen2);
+    translate([-90-vyellow1.x/2, 0]) card_tray(vyellow1);
+    translate([0, -75-vyellow2.y/2]) card_tray(vyellow2);
     *card_well(Vleaders);
 
 }
