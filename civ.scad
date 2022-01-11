@@ -163,9 +163,14 @@ Vfocus5 = [371, 5*Hboard, 21.2];
 Vfocus4 = [309, 4*Hboard, 21.6];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
-Hroom = floor(Vinterior[2] - Vmanual1[2] - Vmanual2[2]);
+Hroom = ceil(Vinterior[2] - Vmanual1[2] - Vmanual2[2]) - 1;
 function tier_height(k) = k ? flayer(Hroom/k) : Vinterior[2];
 function tier_fit(z) = tier_height(floor(Hroom/z));
+for (i=[0:6]) echo("tier", i, tier_height(i), i*tier_height(i));
+echo(clayer(Vfocus5[1]+Rint+floor0), clayer(Vfocus4[1]+Rint+floor0));
+echo(tier_fit(Vfocus5[1]+Rint+floor0), tier_fit(Vfocus4[1]+Rint+floor0));
+echo(1.5*tier_height(4));
+echo("maps", Hroom - stack_height([Nplayers, Nmaps], lid=false, plug=false));
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -564,8 +569,8 @@ module organizer() {
     // box shape and manuals
     // everything needs to fit inside this!
     %color("#101080", 0.25) box(Vinterior, frame=true);
-    *%color("#101080", 0.1) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
-        raise(Vinterior[2]-Vmanual1[2]-Vmanual2[2]) {
+    %color("#101080", 0.05) translate([-Vinterior[0]/2, -Vinterior[1]/2]) {
+        raise(Hroom) {
             cube(Vmanual1);
             raise(Vmanual2[2]) cube(Vmanual2);
         }
@@ -597,18 +602,35 @@ module organizer() {
         // TODO: city states
         // TODO: resources
         // TODO: turn this into a working player tray
-        points = [
-            [[107, 40], 135, 2],
-            [[-107, 40], -135, 5],
-            [[0, 147.5], 0, 3],
+        x4 = 145;
+        y4 = 110;
+        x5 = 150;
+        // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
+        y5 = 90;  // this one fits, but it's uneven
+        echo("x5 x y5", x5, y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
+        pentabox = [
+            [x5/2, -y5],
+            [x5/2, -x5/2],
+            [0, 0],
+            [-x5/2, -x5/2],
+            [-x5/2, -y5],
         ];
-        echo(card_tray_volume(Vleaders), diag2(Vinterior[0], Vinterior[1])/2);
+        points = [
+            [[x4/2, 0], 135, 2],
+            [[-(x4/2), 0], -135, 5],
+            [[0, y4+y5], 0, 3],
+        ];
+        echo(card_tray_volume(Vleaders));
+        echo(tier_fit(card_tray_volume(Vleaders)[2]));
+        echo(diag2(Vinterior[0], Vinterior[1])/2);
+        echo(diag2(Vinterior[0], Vinterior[1])/inch);
         for (p=points) translate(p[0]) rotate(p[1]) {
-            color(player_colors[p[2]]) translate([0, 18])
+            prism(tier_height(2), pentabox, r=Rext);
+            *color(player_colors[p[2]]) translate([0, 18])
                 linear_extrude(tier_height(2)) circle(d=50);
-            color(player_colors[0])
+            *color(player_colors[0])
                 linear_extrude(tier_height(2)-Rext) circle(d=75);
-            linear_extrude(tier_height(2)-2*Rext) hull() {
+            *linear_extrude(tier_height(2)-2*Rext) hull() {
                 translate([0, 18]) circle(d=50);
                 circle(d=75);
                 translate([0, -26]) square([135, 23], center=true);
@@ -645,4 +667,4 @@ module test_card_trays() {
 *deck_box();
 *leaders_card_tray();
 
-organizer();
+rotate(45) organizer();
