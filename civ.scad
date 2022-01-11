@@ -112,6 +112,7 @@ module stadium(size) {
     } else stadium([size, size]);
 }
 module semistadium(size) {
+    // NB: auto-orientation prevents stubby semistadiums
     if (is_list(size)) {
         hull() {
             if (size.x < size.y) {
@@ -189,11 +190,6 @@ Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
 Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
 function tier_height(k) = k ? flayer(Hroom/k) : Vinterior.z;
 function tier_fit(z) = tier_height(floor(Hroom/z));
-for (i=[0:6]) echo("tier", i, tier_height(i), i*tier_height(i));
-echo(clayer(Vfocus5.y+Rint+floor0), clayer(Vfocus4.y+Rint+floor0));
-echo(tier_fit(Vfocus5.y+Rint+floor0), tier_fit(Vfocus4.y+Rint+floor0));
-echo(1.5*tier_height(4));
-echo("maps", Hroom - stack_height([Nplayers, Nmaps], lid=false, plug=false));
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -289,12 +285,12 @@ module wall_vee_cut(size, a=Avee, gap=gap0) {
     y0 = -2*Rext;
     y1 = size.z;
     rise = y1;
-    run = rise/tan(a);
+    run = a == 90 ? 0 : rise/tan(a);
     x0 = span/2;
     x1 = x0 + run;
     a1 = (180-a)/2;
     x2 = x1 + Rext/tan(a1);
-    x3 = x2 + Rext;
+    x3 = x2 + Rext + epsilon;  // needs +epsilon for 90-degree angles
     poly = [[x3, y0], [x3, y1], [x1, y1], [x0, 0], [x0, y0]];
     rotate([90, 0, 0]) linear_extrude(size.y+2*gap, center=true)
     difference() {
@@ -549,7 +545,7 @@ module deck_box(v=Vdeck, color=undef) {
 // leader sheets: thick card with Sleeve Kings super large sleeve
 Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 
-module card_well(v, gap=gap0) {
+module card_well(v, a=Avee, gap=gap0) {
     vtray = card_tray_volume(v);
     shell = [vtray.x, vtray.y];
     well = shell - 2*[wall0, wall0];
@@ -571,10 +567,15 @@ module card_well(v, gap=gap0) {
             dx = (well.x-2*Dthumb)/2;
             dy = (well.y-2*Dthumb)/4;
             for (i=[-1,+1]) translate([i*dx, dy]) circle(d=Dthumb);
+        } else {
+            intersection() {
+                translate([0, -vtray.y/2]) stadium([Dthumb, Dthumb/2+vtray.y]);
+                square(shell + 2*[gap, gap], center=true);
+            }
         }
     }
     raise() translate([0, wall0-vtray.y]/2)
-        wall_vee_cut([Dthumb, wall0, vtray.z-floor0], gap=gap);
+        wall_vee_cut([Dthumb, wall0, vtray.z-floor0], a=a, gap=gap);
 }
 
 module card_tray(v, color=undef) {
@@ -596,7 +597,45 @@ module leaders_card_tray(color=undef) {
 }
 
 Vwonder = [20, 30.35, Hboard];
-module wonder_tile() {
+module wonder_tile(n=3) {  // stored in stacks of 3
+    linear_extrude(n*Vwonder.z) semistadium([Vwonder.x, Vwonder.y]);
+}
+// TODO: wonder_well module
+
+Vwdeck = vdeck(9, yellow_sleeve, premium_sleeve, wide=true);
+Vwtray = [for (x=[  // round dimensions to even layers
+    max(Vwdeck.x, 3*Vwonder.x + 2*Rint) + 2*Rext,
+    Vwdeck.y + Rint + Vwonder.y + 3*Rext,
+    max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
+]) qlayer(x)];
+module wonder_tray(color=undef) {
+    xtile = (Vwtray.x - 2*Rext - 3*Vwonder.x) / 2;  // wonder tile spacing
+    echo(xtile, xtile-2*Rint, Vwtray);
+    color(color) difference() {
+        prism(Vwtray.z, [Vwtray.x, Vwtray.y], r=Rext);
+        // deck well
+        dwell = [Vwdeck.x, Vwdeck.y, max(Vwdeck.z, 3*Vwonder.z)];
+        translate([0, (Vwtray.y-dwell.y)/2-Rext]) rotate(180)
+            card_well(dwell);
+        // wonder tile wells
+        dcut = [Vwonder.x-Rint-2*Rext, Vwonder.y+wall0/2+Rint/2-Rext];
+        for (i=[-1:+1]) translate([i*(xtile+Vwonder.x), 0]) {
+            translate([0, Rext-(Vwtray.y-Vwonder.y)/2])
+                raise() linear_extrude(Vwtray.z) offset(r=Rint)
+                    semistadium([Vwonder.x, Vwonder.y]);
+            translate([0, wall0/2-Vwtray.y/2]) {
+                wall_vee_cut([dcut.x, wall0, Vwtray.z], a=90);
+                linear_extrude(3*floor0, center=true)
+                    stadium([dcut.x, 2*dcut.y]);
+            }
+
+        }
+    }
+    %translate([0, (Vwtray.y-Vwdeck.y)/2-Rext, Vwdeck.z/2+floor0])
+        cube(Vwdeck, center=true);
+    %for (i=[-1:+1])
+        translate([i*(xtile+Vwonder.x), Rext-(Vwtray.y-Vwonder.y)/2, floor0])
+        wonder_tile();
 }
 
 module organizer() {
@@ -647,7 +686,7 @@ module organizer() {
         x5 = 150;
         // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
         y5 = 90;  // this one fits, but it's uneven
-        echo("x5 x y5", x5, y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
+        // echo("x5 x y5", x5, y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
         pentabox = [
             [x5/2, -y5],
             [x5/2, -x5/2],
@@ -660,10 +699,10 @@ module organizer() {
             [[-(x4/2), 0], -135, 5],
             [[0, y4+y5], 0, 3],
         ];
-        echo(card_tray_volume(Vleaders));
-        echo(tier_fit(card_tray_volume(Vleaders).z));
-        echo(diag2(Vinterior.x, Vinterior.y)/2);
-        echo(diag2(Vinterior.x, Vinterior.y)/inch);
+        // echo(card_tray_volume(Vleaders));
+        // echo(tier_fit(card_tray_volume(Vleaders).z));
+        // echo(diag2(Vinterior.x, Vinterior.y)/2);
+        // echo(diag2(Vinterior.x, Vinterior.y)/inch);
         for (p=points) translate(p[0]) rotate(p[1]) {
             prism(tier_height(2), pentabox, r=Rext);
             *color(player_colors[p[2]]) translate([0, 18])
@@ -676,6 +715,7 @@ module organizer() {
                 translate([0, -26]) square([135, 23], center=true);
             }
         }
+        translate([0, Vwtray.y/2, tier_height(2)]) wonder_tray();
     }
 }
 
@@ -706,5 +746,6 @@ module test_card_trays() {
 *map_tile_lid();
 *deck_box();
 *leaders_card_tray();
+wonder_tray();
 
-rotate(45) organizer();
+*rotate(45) organizer();
