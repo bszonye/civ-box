@@ -98,14 +98,37 @@ module stadium(size) {
             if (size.x < size.y) {
                 d = size.x;
                 a = [d, size.y-d];
+                square(a, center=true);  // avoid circle rendering artifacts
                 for (i=[-1,+1]) translate([0, i*a.y/2]) circle(d=d);
-            } else {
+            } else if (size.y < size.x) {
                 d = size.y;
                 a = [size.x-d, d];
+                square(a, center=true);  // avoid circle rendering artifacts
                 for (i=[-1,+1]) translate([i*a.x/2, 0]) circle(d=d);
+            } else {
+                circle(d=size.x);
             }
         }
     } else stadium([size, size]);
+}
+module semistadium(size) {
+    if (is_list(size)) {
+        hull() {
+            if (size.x < size.y) {
+                d = size.x;
+                a = [d, size.y-d];
+                for (i=[-1,0]) translate([0, i*d/2]) square(a, center=true);
+                translate([0, a.y/2]) circle(d=d);
+            } else if (size.y < size.x) {
+                d = size.y;
+                a = [size.x-d, d];
+                for (i=[-1,0]) translate([i*d/2, 0]) square(a, center=true);
+                translate([a.x/2, 0]) circle(d=d);
+            } else {
+                circle(d=size.x);
+            }
+        }
+    } else semistadium([size, size]);
 }
 
 module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
@@ -570,6 +593,10 @@ module card_tray(v, color=undef) {
 module leaders_card_tray(color=undef) {
     // TODO: expand this to exactly 135x110mm
     card_tray(Vleaders, color=color);
+}
+
+Vwonder = [20, 30.35, Hboard];
+module wonder_tile() {
 }
 
 module organizer() {
