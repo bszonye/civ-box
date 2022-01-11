@@ -221,6 +221,46 @@ Vfframe = [for (x=[  // round dimensions to even layers
     floor0 + Hshelf4 + Hshelf5,
 ]) qlayer(x)];
 
+module prism(h, shape=1, r=0, scale=1) {
+    // TODO: calculate scale from bounding boxes?
+    linear_extrude(h, scale=scale) offset(r=r) offset(r=-r)
+    if (is_list(shape) && is_list(shape[0])) {
+        polygon(shape);
+    } else {
+        square(shape, center=true);
+    }
+}
+
+module lattice_cut(v, i, j=0, h0=0, d=4.8, a=Avee, r=Rint,
+                   half=0, tiers=1, factors=2) {
+    // v: lattice volume
+    // i: horizontal position
+    // j: vertical position
+    // h0: z intercept of pattern start (e.g. floor0 with wall_vee_cut)
+    // d: strut width
+    // a: strut angle
+    // r: corner radius
+    // half: -1 = left half, 0 = whole, +1 = right half
+    // tiers: number of tiers in vertical split
+    // factors: verticial divisibility (use 6/12/etc for complex patterns)
+    hlayers = factors*round(nlayer(v.z-d)/factors);
+    htri = zlayer(hlayers / tiers); // trestle height
+    dtri = 2*eround(htri/tan(a));  // trestle width (triangle base)
+    dycut = v.y + 2*gap0; // depth for cutting through Y axis
+    tri = [
+        [[0, -htri/2], [0, htri/2], [-dtri/2, -htri/2]],  // left
+        [[dtri/2, -htri/2], [0, htri/2], [-dtri/2, -htri/2]],  // whole
+        [[0, -htri/2], [0, htri/2], [dtri/2, -htri/2]],  // half
+    ];
+    xstrut = eround(d/2/sin(a));
+    flip = 1 - (2 * (i % 2));
+    z0 = qlayer(v.z - htri*tiers) / 2;
+    x0 = eround((z0 - h0) / tan(a)) + xstrut;
+    y0 = dycut - gap0;
+    translate([x0, y0, z0] + [(i+j+1)/2*dtri, 0, (j+1/2)*htri])
+        scale([1, 1, flip]) rotate([90, 0, 0]) linear_extrude(dycut)
+        offset(r=r) offset(r=-d/2-r) polygon(tri[sign(half)+1]);
+}
 module wall_vee_cut(size, a=Avee, gap=gap0) {
     span = size.x;
     y0 = -2*Rext;
@@ -240,16 +280,6 @@ module wall_vee_cut(size, a=Avee, gap=gap0) {
             offset(r=Rext) offset(r=-Rext) polygon(poly);
             translate([x0, y0]) square([x3-x0, -y0]);
         }
-    }
-}
-
-module prism(h, shape=1, r=0, scale=1) {
-    // TODO: calculate scale from bounding boxes?
-    linear_extrude(h, scale=scale) offset(r=r) offset(r=-r)
-    if (is_list(shape) && is_list(shape[0])) {
-        polygon(shape);
-    } else {
-        square(shape, center=true);
     }
 }
 
@@ -291,42 +321,14 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     // well sizes
     f5well = [Vfocus5.x + 2*Rint, Vfframe.y - 2*f5wall];
     f4well = [Vfocus4.x + 2*Rint, Vfframe.y - 2*f4wall];
-    // trestle lattice
-    dstrut = 4.8;  // strut width
-    rstrut = Rint;
     // space between sections
     xjoint = 40;
     xspan = xspread + xjoint;
-    // depth for cutting through Y axis
-    dycut = Vfframe.y + 2*gap0;
 
     module joiner_tongue(groove=false) {
         d = Vfframe.y/2;
         top = [xspan + 3*d, d];
         translate([0, Vfframe.y/2]) tongue(top, groove=groove);
-    }
-    module lattice(i, j, half=false, tiers=2) {
-        // make sure height is evenly divisible by 2, 3, 6 tiers
-        hlayers = 6*round(nlayer(Vfframe.z-dstrut)/6);
-        htri = zlayer(hlayers / tiers); // trestle height
-        dtri = 2*eround(htri/tan(Avee));  // trestle width (triangle base)
-        tfull = [[dtri/2, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
-        thalf = [[0, -htri/2], [0, htri/2], [-dtri/2, -htri/2]];
-        xstrut = eround(dstrut/2 / sin(Avee));
-        z0 = qlayer(Vfframe.z - htri*tiers) / 2;
-        x0 = eround((z0 - floor0) / tan(Avee)) + xstrut;
-        y0 = dycut - gap0;
-        origin = [xjoint/2 + x0, y0, z0];
-        flip = 1 - (2 * (i % 2));
-        translate(origin + [(i+j+1)/2*dtri, 0, (j+1/2)*htri])
-            scale([1, 1, flip]) rotate([90, 0, 0]) linear_extrude(dycut)
-            offset(r=rstrut) offset(r=-dstrut/2-rstrut)
-            polygon(half ? thalf : tfull);
-        // TODO: clean this up
-        xwell4 = (f4well.x/2 - origin.x);
-        ntri4 = floor(2*xwell4/dtri)/2;
-        otri4 = xwell4 - ntri4*dtri;
-        // echo(ntri4, otri4, dtri/2-otri4, xjoint);
     }
     module riser() {
         side = sign(section);
@@ -358,9 +360,14 @@ module focus_frame(section=undef, xspread=0, color=undef) {
                 }
             }
             // trestle lattice
-            for (i=[0:5]) lattice(i, 0, tiers=1);
-            *for (i=[12:13]) lattice(i, 1);
-            *for (i=[13:14]) lattice(i, 0);
+            translate([xjoint/2, 0]) {
+                dstrut=4.8;
+                for (i=[0:5]) lattice_cut(Vfframe, i, h0=floor0);
+                *for (i=[12:13])
+                    lattice_cut(Vfframe, i, 1, h0=floor0, tiers=2);
+                *for (i=[13:14])
+                    lattice_cut(Vfframe, i, 0, h0=floor0, tiers=2);
+            }
             // joiner groove
             joiner_tongue(groove=true);
         }
@@ -578,10 +585,10 @@ module organizer() {
     // focus frame bar and everything below
     rotate(135) translate([0, -Rext]) {
         // common deck boxes
-        rotate(-45)
+        rotate(-45)  // unique focus cards & victory cards
             translate([Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
             deck_box(color=player_colors[0]);
-        rotate(45)
+        rotate(45)  // pre-expansion cards
             translate([-Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
             deck_box(color="#202020");
         // focus bars
