@@ -763,18 +763,21 @@ module organizer() {
             [2*Vwtray.x+gap0, Vwtray.y, 2*Vwtray.z]);
         tier_info("leaders", Vltray);
         tier_info("deck box", Vdbox);
-        // wonder trays
-        for (i=[-1,+1]) for (j=[0,1])
-            translate([i*(gap0+Vwtray.x)/2, Vwtray.y/2, j*Vwtray.z])
-                wonders_tray();
-        // city states
-        raise(2 * Vwtray.z)
-        for (j=[0,1]) translate([0, Vctray.y/2, j*Vctray.z]) rotate(180)
-            city_states_tray();
-        // leader tray
-        *raise(3*tier_height(4))
-            translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
-            leaders_card_tray(color=player_colors[0]);
+        translate([0, Vdbox.y/2]) deck_box(color=player_colors[0]);
+        translate([0, Vdbox.y+gap0]) {
+            // wonder trays
+            for (i=[-1,+1]) for (j=[0,1])
+                translate([i*(gap0+Vwtray.x)/2, Vwtray.y/2, j*Vwtray.z])
+                    wonders_tray();
+            // city states
+            raise(2*Vwtray.z)
+            for (j=[0,1]) translate([0, Vctray.y/2, j*Vctray.z])
+                city_states_tray();
+            // leader tray
+            raise(2*Vwtray.z + 2*Vctray.z)
+                translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
+                leaders_card_tray(color=player_colors[0]);
+        }
         // TODO: barbarians
         // TODO: resources
         // TODO: turn this into a working player tray
@@ -841,7 +844,7 @@ module test_trays() {
 *deck_box();
 *leaders_card_tray();
 *wonders_tray();
-city_states_tray();
+*city_states_tray();
 
 *test_trays();
-*rotate(45) organizer();
+rotate(45) organizer();
