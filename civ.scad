@@ -551,21 +551,29 @@ module card_well(v, a=Avee, gap=gap0) {
         rounded_square(Rint, well);
     raise(-gap) linear_extrude(floor0+2*gap) {
         // thumb round
+        xthumb = 2/3 * Dthumb;  // depth of thumb round
         translate([0, -gap-vtray.y/2])
-            semistadium(wall0+gap, d=Dthumb);
+            semistadium(xthumb-Dthumb/2+gap, d=Dthumb);
         // bottom index hole
-        if (3*Dthumb < min(well.x, well.y)) {
-            rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
-        } else if (2.5*Dthumb < well.y) {
-            dy = max(0, well.y - 2.5*Dthumb);
-            translate([0, Dthumb/4]) stadium(dy, d=Dthumb, a=90);
-        } else if (3.5*Dthumb < well.x) {
-            dx = (well.x-2*Dthumb)/2;
-            dy = (well.y-2*Dthumb)/4;
-            for (i=[-1,+1]) translate([i*dx, dy]) circle(d=Dthumb);
+        if (3*Dthumb < min(vtray.x, vtray.y)) {
+            // large tray: large, square index hole
+            rounded_square(Dthumb/2, vtray - 2*[Dthumb, Dthumb]);
+        } else if (3/2*Dthumb+2*xthumb < vtray.y) {
+            // medium tray: 1/2 thumb between holes, 2/3 thumb to edge
+            dy = vtray.y - 2*xthumb - Dthumb/2;
+            translate([0, Dthumb/4]) stadium(dy-Dthumb, d=Dthumb, a=90);
+        } else if (3.5*Dthumb < vtray.x) {
+            // wide tray: two small holes with balanced margins
+            u0 = [0, xthumb-Dthumb/2-vtray.y/2];  // center of thumb round
+            u1 = [Dthumb/2, u0.y+Dthumb*sin(60)];
+            u2 = [vtray.x/2-Dthumb/2, vtray.y/2-Dthumb/2];  // corner of tray
+            t = 1-(1/phi);  // distance from u0 to u1
+            ut = t*(u2-u1) + u1;
+            for (i=[-1,+1]) translate([i*ut.x, ut.y]) circle(d=Dthumb);
         } else {
+            // small tray: long index notch, 1/2 thumb longer than usual
             translate([0, -vtray.y]/2)
-                semistadium(vtray.y/2-Dthumb/3, d=Dthumb);
+                semistadium(xthumb, d=Dthumb);
         }
     }
     raise() translate([0, wall0-vtray.y]/2)
@@ -574,7 +582,7 @@ module card_well(v, a=Avee, gap=gap0) {
 
 module card_tray(v, color=undef) {
     // TODO: round height to a simple fraction of Hroom?
-    // TODO: round sizes up to convenient multiples (1mm, 5mm, etc)
+    // TODO: round sizes up to convenient multiples (1mm, 5mm, etc)?
     vtray = card_tray_volume(v);
     shell = [vtray.x, vtray.y];
     well = shell - [2*wall0, 2*wall0];
@@ -586,7 +594,7 @@ module card_tray(v, color=undef) {
     %raise(floor0 + v.z/2) cube(v, center=true);
 }
 module leaders_card_tray(color=undef) {
-    // TODO: expand this to exactly 135x110mm
+    // TODO: expand this to exactly 135x110mm?
     card_tray(Vleaders, color=color);
 }
 
@@ -736,7 +744,7 @@ module test_card_trays() {
     *card_well(Vleaders);
 
 }
-*test_card_trays();
+test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -751,4 +759,4 @@ module test_card_trays() {
 *leaders_card_tray();
 *wonder_tray();
 
-rotate(45) organizer();
+*rotate(45) organizer();
