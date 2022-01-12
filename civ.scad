@@ -664,11 +664,8 @@ module wonders_tray(color=undef) {
         vcards.y + min(slack.y, Rint),
         max(vcards.z, vtiles.z),
     ];
-    echo(slack=slack, vcards=vcards, wcards=wcards);
     wtiles = [vtiles.x, vtiles.y, max(vcards.z, vtiles.z)];
     xtile = (vtray.x-wall0)/3 - vtiles.x;  // wonder tile x-spacing
-    // xtile = (vtray.x - 2*Rext - 3*vtiles.x) / 2;  // wonder tile x-spacing
-    echo(xtile=xtile);
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         // deck well
@@ -701,25 +698,21 @@ module city_states_tray(color=undef) {
     vcards = Vcdeck;
     wcards = [(vtray.x-wall0)/3-Rint-Rext, vcards.y, vcards.z+Hboard];
     xwell = (vtray.x-wall0)/3-vcards.x;
-    echo(xwell=xwell, vcards=vcards, wcards=wcards);
     ahex = 90;
-    xhex = Rhex1*cos(abs(ahex % 60));
-    yhex = Rhex1*cos(abs(ahex % 60) - 30);
-    echo(ahex=ahex, xhex=xhex, yhex=yhex);
+    rhex = Rhex1 * [cos(abs(ahex % 60)), cos(abs(ahex % 60) - 30)];
+    pcards = [0, (wcards.y-vtray.y)/2+Rext];
+    phex = [wcards.x/2-rhex.x, vtray.y/2-Rext-rhex.y];
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         for (i=[-1:+1]) translate([i*(xwell+vcards.x), 0]) {
-            translate([0, (wcards.y-vtray.y)/2+Rext]) card_well(wcards);
-            translate([wcards.x/2-xhex, vtray.y/2-yhex-Rext, floor0])
-                rotate(ahex) linear_extrude(vtray.z)
-                    offset(r=Rint) hex_poly(r=Rhex1);
+            translate(pcards) card_well(wcards);
+            raise() translate(phex) rotate(ahex) linear_extrude(vtray.z)
+                offset(r=Rint) hex_poly(r=Rhex1);
         }
     }
-    %for (i=[-1:+1]) translate([i*(xwell+wcards.x), 0, floor0]) {
-        translate([0, (wcards.y-vtray.y)/2+Rext, vcards.z/2])
-            cube(vcards, center=true);
-        translate([wcards.x/2-xhex, vtray.y/2-yhex-Rext, vcards.z])
-            rotate(ahex) hex_tile(r=Rhex1);
+    %for (i=[-1:+1]) translate([i*(xwell+vcards.x), 0, floor0]) {
+        raise(vcards.z/2) translate(pcards) cube(vcards, center=true);
+        raise(vcards.z) translate(phex) rotate(ahex) hex_tile(r=Rhex1);
     }
 }
 
@@ -848,7 +841,7 @@ module test_trays() {
 *deck_box();
 *leaders_card_tray();
 *wonders_tray();
-*city_states_tray();
+city_states_tray();
 
 *test_trays();
-rotate(45) organizer();
+*rotate(45) organizer();
