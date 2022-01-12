@@ -35,9 +35,31 @@ function clayer(z=zlayer()) = zlayer(ceil(nlayer(z)));
 function flayer(z=zlayer()) = zlayer(floor(nlayer(z)));
 
 epsilon = 0.01;
-function eround(x) = epsilon * round(x/epsilon);
-function eceil(x) = epsilon * ceil(x/epsilon);
-function efloor(x) = epsilon * floor(x/epsilon);
+function eround(x, e=epsilon) = e * round(x/e);
+function eceil(x, e=epsilon) = e * ceil(x/e);
+function efloor(x, e=epsilon) = e * floor(x/e);
+function tround(x) = eround(x, e=0.05);  // twentieths of a millimeter
+function tceil(x) = eceil(x, e=0.05);  // twentieths of a millimeter
+function tfloor(x) = efloor(x, e=0.05);  // twentieths of a millimeter
+
+// tidy measurements
+function vround(v) = [tround(v.x), tround(v.y), qlayer(v.z)];
+function vceil(v) = [tceil(v.x), tceil(v.y), clayer(v.z)];
+function vfloor(v) = [tfloor(v.x), tfloor(v.y), flayer(v.z)];
+
+// fit checker for assertions
+// check whether a specified volume (vspec) is sufficiently large to contain
+// another volume, either exactly (vexact) or after rounding (vround).
+// will echo a summary table if vtrace is set or if the fit fails.
+vtrace = true;
+function vfit(vspec, vexact, title="vfit") = let (vround = vround(vexact))
+    (vtrace && vtrace(title, vexact, vround, vspec)) ||
+    (vexact.x <= vspec.x || vround.x <= vspec.x) &&
+    (vexact.y <= vspec.y || vround.y <= vspec.y) &&
+    (vexact.z <= vspec.z || vround.z <= vspec.z) ||
+    (!vtrace && vtrace(title, vexact, vround, vspec));
+function vtrace(title, vexact, vround, vspec) =  // returns undef
+    echo(title) echo(vspec=vspec) echo(vround=vround) echo(vexact=vexact);
 
 $fa = 15;  // 24 segments per circle (aligns with axes)
 $fs = min(layer_height/2, xspace(1)/2);
@@ -83,8 +105,6 @@ floor0 = qlayer(wall0);
 gap0 = 0.1;
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
-function diag2(x, y) = sqrt(x*x + y*y);
-function diag3(x, y, z) = sqrt(x*x + y*y + z*z);
 
 // utility modules
 module raise(z=floor0) {
@@ -180,6 +200,7 @@ Nplayers = 5;
 Nmaps = 16;  // number of map and water tiles
 Hboard = 2.25;  // tile & token thickness
 Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
+Rhex1 = 18;  // radius of single hex tiles
 Hcap = clayer(4);  // total height of lid + plug
 Vfocus5 = [371, 5*Hboard, 21.2];
 Vfocus4 = [309, 4*Hboard, 21.6];
@@ -187,7 +208,9 @@ Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
 Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
 function tier_height(k) = k ? flayer(Hroom/k) : Vinterior.z;
-function tier_fit(z) = tier_height(floor(Hroom/z));
+function tier_number(z) = floor(Hroom/z);
+function tier_ceil(z) = tier_height(tier_number(z));
+function tier_room(z) = tier_ceil(z) - z;
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -233,7 +256,7 @@ Avee = 65;
 Hshelf4 = Vfocus4.z + Rint;
 Hshelf5 = Vfocus5.z + Rext;
 Vfframe = [for (x=[  // round dimensions to even layers
-    diag2(Vinterior.x, Vinterior.y),
+    norm([Vinterior.x, Vinterior.y]),  // diagonal length
     max(Vfocus4.y, Vfocus5.y) + 2*Rext - Rint,  // 1mm narrower than usual
     floor0 + Hshelf4 + Hshelf5,
 ]) qlayer(x)];
@@ -542,6 +565,7 @@ module deck_box(v=Vdeck, color=undef) {
 
 // leader sheets: thick card with Sleeve Kings super large sleeve
 Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
+Vltray = card_tray_volume(Vleaders);
 
 module card_well(v, a=Avee, gap=gap0) {
     vtray = card_tray_volume(v);
@@ -619,33 +643,90 @@ module wonder_well(v, gap=gap0) {
 }
 
 Vwdeck = vdeck(9, yellow_sleeve, premium_sleeve, wide=true);
-Vwtray = [for (x=[  // round dimensions to even layers
+Vwtray0 = [
     max(Vwdeck.x, 3*Vwonder.x + 2*Rint) + 2*Rext,
     Vwdeck.y + Rint + Vwonder.y + 3*Rext,
     max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
-]) qlayer(x)];
-module wonder_tray(color=undef) {
+];
+Vwtray = vround([72.4, 85, Vwtray0.z]);
+assert(vfit(Vwtray, Vwtray0, "WONDERS TRAY"));
+module wonders_tray(color=undef) {
     vtray = Vwtray;
     vcards = Vwdeck;
     vtiles = wonder_volume();
-    xtile = (vtray.x - 2*Rext - 3*vtiles.x) / 2;  // wonder tile spacing
+    // adjusted card & tile dimensions, including slack
+    slack = [
+        vtray.x - 2*Rext - vcards.x,
+        vtray.y - 3*Rext - vtiles.y - Rint - vcards.y,
+    ];
+    wcards = [
+        vcards.x + slack.x,
+        vcards.y + min(slack.y, Rint),
+        max(vcards.z, vtiles.z),
+    ];
+    echo(slack=slack, vcards=vcards, wcards=wcards);
+    wtiles = [vtiles.x, vtiles.y, max(vcards.z, vtiles.z)];
+    xtile = (vtray.x-wall0)/3 - vtiles.x;  // wonder tile x-spacing
+    // xtile = (vtray.x - 2*Rext - 3*vtiles.x) / 2;  // wonder tile x-spacing
+    echo(xtile=xtile);
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         // deck well
-        dwell = [vcards.x, vcards.y, max(vcards.z, vtiles.z)];
-        translate([0, (vtray.y-dwell.y)/2-Rext]) rotate(180)
-            card_well(dwell);
+        translate([0, (vtray.y-wcards.y)/2-Rext]) rotate(180)
+            card_well(wcards);
         // wonder tile wells
-        twell = [vtiles.x, vtiles.y, max(vcards.z, vtiles.z)];
         for (i=[-1:+1])
             translate([i*(xtile+vtiles.x), Rext-vtray.y/2])
-                wonder_well(twell);
+                wonder_well(wtiles);
     }
-    %translate([0, (vtray.y-vcards.y)/2-Rext, vcards.z/2+floor0])
+    %translate([0, (vtray.y-wcards.y)/2-Rext, wcards.z/2+floor0])
         cube(vcards, center=true);
     %for (i=[-1:+1])
         translate([i*(xtile+vtiles.x), Rext-vtray.y/2, floor0])
         wonder_tile();
+}
+
+Vcdeck = vdeck(4, yellow_sleeve, premium_sleeve);
+Vctray0 = [  // exact size
+    3 * (Vcdeck.x + Rint + Rext) + wall0,
+    1 * (Vcdeck.y + Rint + Rext) + wall0,
+    Vcdeck.z + max(Hboard + Rint, Rext) + floor0,
+];
+Vctray = vround([145, 85, Vctray0.z]);
+assert(vfit(Vctray, Vctray0, "CITY STATES TRAY"));
+tier_info("city states", Vctray);
+tier_info("city states stack", [Vctray.x, Vctray.y, 2*Vctray.z]);
+module city_states_tray(color=undef) {
+    vtray = Vctray;
+    vcards = Vcdeck;
+    wcards = [(vtray.x-wall0)/3-Rint-Rext, vcards.y, vcards.z+Hboard];
+    xwell = (vtray.x-wall0)/3-vcards.x;
+    echo(xwell=xwell, vcards=vcards, wcards=wcards);
+    ahex = 90;
+    xhex = Rhex1*cos(abs(ahex % 60));
+    yhex = Rhex1*cos(abs(ahex % 60) - 30);
+    echo(ahex=ahex, xhex=xhex, yhex=yhex);
+    color(color) difference() {
+        prism(vtray.z, [vtray.x, vtray.y], r=Rext);
+        for (i=[-1:+1]) translate([i*(xwell+vcards.x), 0]) {
+            translate([0, (wcards.y-vtray.y)/2+Rext]) card_well(wcards);
+            translate([wcards.x/2-xhex, vtray.y/2-yhex-Rext, floor0])
+                rotate(ahex) linear_extrude(vtray.z)
+                    offset(r=Rint) hex_poly(r=Rhex1);
+        }
+    }
+    %for (i=[-1:+1]) translate([i*(xwell+wcards.x), 0, floor0]) {
+        translate([0, (wcards.y-vtray.y)/2+Rext, vcards.z/2])
+            cube(vcards, center=true);
+        translate([wcards.x/2-xhex, vtray.y/2-yhex-Rext, vcards.z])
+            rotate(ahex) hex_tile(r=Rhex1);
+    }
+}
+
+module tier_info(name, v) {
+    h = v.z;
+    echo(name);
+    echo(v=v, h=h, n=tier_number(h), c=tier_ceil(h), r=tier_room(h));
 }
 
 module organizer() {
@@ -684,16 +765,29 @@ module organizer() {
     }
     // everything above the bar
     rotate(-45) translate([0, Rext+gap0]) {
-        translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
+        tier_info("wonders", Vwtray);
+        tier_info("wonders stack",
+            [2*Vwtray.x+gap0, Vwtray.y, 2*Vwtray.z]);
+        tier_info("leaders", Vltray);
+        tier_info("deck box", Vdbox);
+        // wonder trays
+        for (i=[-1,+1]) for (j=[0,1])
+            translate([i*(gap0+Vwtray.x)/2, Vwtray.y/2, j*Vwtray.z])
+                wonders_tray();
+        // city states
+        raise(2 * Vwtray.z)
+        for (j=[0,1]) translate([0, Vctray.y/2, j*Vctray.z]) rotate(180)
+            city_states_tray();
+        // leader tray
+        *raise(3*tier_height(4))
+            translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
             leaders_card_tray(color=player_colors[0]);
-        // TODO: wonders
         // TODO: barbarians
-        // TODO: city states
         // TODO: resources
         // TODO: turn this into a working player tray
         x4 = 145;
         y4 = 110;
-        x5 = 150;
+        x5 = 145;
         // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
         y5 = 90;  // this one fits, but it's uneven
         echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
@@ -705,14 +799,11 @@ module organizer() {
             [-x5/2, -y5],
         ];
         points = [
-            [[x4/2, 0], 135, 2],
-            [[-(x4/2), 0], -135, 5],
+            [[x4/2+gap0, 0], 135, 2],
+            [[-(x4/2+gap0), 0], -135, 5],
             [[0, y4+y5], 0, 3],
+            // [[0, Vwtray.y+gap0 + y5], 0, 3],
         ];
-        // echo(card_tray_volume(Vleaders));
-        // echo(tier_fit(card_tray_volume(Vleaders).z));
-        // echo(diag2(Vinterior.x, Vinterior.y)/2);
-        // echo(diag2(Vinterior.x, Vinterior.y)/inch);
         for (p=points) translate(p[0]) rotate(p[1]) {
             prism(tier_height(2), pentabox, r=Rext);
             *color(player_colors[p[2]]) translate([0, 18])
@@ -725,12 +816,11 @@ module organizer() {
                 translate([0, -26]) square([135, 23], center=true);
             }
         }
-        translate([0, Vwtray.y/2, tier_height(2)]) wonder_tray();
     }
 }
 
 // tests for card trays
-module test_card_trays() {
+module test_trays() {
     vgreen1 = vdeck(18, green_sleeve, premium_sleeve, wide=false);
     vgreen2 = vdeck(18, green_sleeve, premium_sleeve, wide=true);
     vyellow1 = vdeck(18, yellow_sleeve, premium_sleeve, wide=false);
@@ -740,11 +830,11 @@ module test_card_trays() {
     translate([0, 75+vgreen2.y/2]) card_tray(vgreen2);
     translate([-90-vyellow1.x/2, 0]) card_tray(vyellow1);
     translate([0, -75-vyellow2.y/2]) card_tray(vyellow2);
-    translate([0, -95-vyellow2.y - Vwtray.y/2]) wonder_tray();
-    *card_well(Vleaders);
-
+    translate([10+Rext+vyellow2.x/2, -95-vyellow2.y]) {
+        translate([10+Vwtray.x/2, -Vwtray.y/2]) wonders_tray();
+        translate([-10-Vctray.x/2, -Vctray.y/2]) city_states_tray();
+    }
 }
-test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -757,6 +847,8 @@ test_card_trays();
 *map_tile_lid();
 *deck_box();
 *leaders_card_tray();
-*wonder_tray();
+*wonders_tray();
+*city_states_tray();
 
-*rotate(45) organizer();
+*test_trays();
+rotate(45) organizer();
