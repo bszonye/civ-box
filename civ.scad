@@ -1,3 +1,4 @@
+echo("\n\n====== CIV ORGANIZER ======\n\n");
 layer_height = 0.2;
 extrusion_width = 0.45;
 extrusion_overlap = layer_height * (1 - PI/4);
@@ -38,7 +39,7 @@ function eround(x) = epsilon * round(x/epsilon);
 function eceil(x) = epsilon * ceil(x/epsilon);
 function efloor(x) = epsilon * floor(x/epsilon);
 
-$fa = 15;
+$fa = 15;  // 24 segments per circle (aligns with axes)
 $fs = min(layer_height/2, xspace(1)/2);
 
 inch = 25.4;
@@ -215,7 +216,7 @@ Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
 Alid = 30;  // angle of lid chamfer
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
 Hchamfer = (Rext-Rplug) * tan(Alid);
-Dthumb = 25;  // thumb cutout diameter
+Dthumb = 25;  // index hole diameter
 Gbox = [
     [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
     [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-2, 3],
@@ -552,7 +553,7 @@ module card_well(v, a=Avee, gap=gap0) {
         // thumb round
         translate([0, -gap-vtray.y/2])
             semistadium(wall0+gap, d=Dthumb);
-        // bottom hole
+        // bottom index hole
         if (3*Dthumb < min(well.x, well.y)) {
             rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
         } else if (2.5*Dthumb < well.y) {
@@ -599,7 +600,7 @@ module wonder_well(v, gap=gap0) {
     vtray = v + [2*Rext, 2*Rext, Rext+floor0];
     // well
     raise() linear_extrude(vtray.z-floor0+gap)
-        offset(r=Rint) semistadium_fill([v.x, v.y]);
+        offset(r=Rint) semistadium(v.y-v.x/2, d=v.x);
     // index hole
     margin = 2*Rext + Rint/2;
     dcut = [qlayer(vtray.x-2*margin), vtray.y-margin];
@@ -607,7 +608,6 @@ module wonder_well(v, gap=gap0) {
         wall_vee_cut([dcut.x, wall0, vtray.z], a=90);
     translate([0, -Rext-gap, -gap]) linear_extrude(floor0+2*gap)
         semistadium(dcut.y-dcut.x/2+gap, d=dcut.x);
-    echo(dcut);
 }
 
 Vwdeck = vdeck(9, yellow_sleeve, premium_sleeve, wide=true);
@@ -621,7 +621,6 @@ module wonder_tray(color=undef) {
     vcards = Vwdeck;
     vtiles = wonder_volume();
     xtile = (vtray.x - 2*Rext - 3*vtiles.x) / 2;  // wonder tile spacing
-    echo(xtile, xtile-2*Rint, vtray);
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         // deck well
@@ -689,7 +688,7 @@ module organizer() {
         x5 = 150;
         // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
         y5 = 90;  // this one fits, but it's uneven
-        // echo("x5 x y5", x5, y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
+        echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
         pentabox = [
             [x5/2, -y5],
             [x5/2, -x5/2],
@@ -737,7 +736,7 @@ module test_card_trays() {
     *card_well(Vleaders);
 
 }
-test_card_trays();
+*test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -752,4 +751,4 @@ test_card_trays();
 *leaders_card_tray();
 *wonder_tray();
 
-*rotate(45) organizer();
+rotate(45) organizer();
