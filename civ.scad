@@ -92,44 +92,41 @@ module raise(z=floor0) {
 module rounded_square(r, size) {
     offset(r=r) offset(r=-r) square(size, center=true);
 }
-module stadium(size) {
-    if (is_list(size)) {
-        hull() {
-            if (size.x < size.y) {
-                d = size.x;
-                a = [d, size.y-d];
-                square(a, center=true);  // avoid circle rendering artifacts
-                for (i=[-1,+1]) translate([0, i*a.y/2]) circle(d=d);
-            } else if (size.y < size.x) {
-                d = size.y;
-                a = [size.x-d, d];
-                square(a, center=true);  // avoid circle rendering artifacts
-                for (i=[-1,+1]) translate([i*a.x/2, 0]) circle(d=d);
-            } else {
-                circle(d=size.x);
-            }
-        }
-    } else stadium([size, size]);
+module stadium(side, r=undef, d=undef, a=0) {
+    radius = is_undef(d) ? r : d/2;
+    u = [cos(a), sin(a)];
+    hull() {
+        if (side) rotate(a) square([side, 2*radius], center=true);
+        for (i=[-1,+1]) translate(i*u*side/2) circle(radius);
+    }
 }
-module semistadium(size) {
-    // NB: auto-orientation prevents stubby semistadiums
+module stadium_fill(size) {
     if (is_list(size)) {
-        hull() {
-            if (size.x < size.y) {
-                d = size.x;
-                a = [d, size.y-d];
-                for (i=[-1,0]) translate([0, i*d/2]) square(a, center=true);
-                translate([0, a.y/2]) circle(d=d);
-            } else if (size.y < size.x) {
-                d = size.y;
-                a = [size.x-d, d];
-                for (i=[-1,0]) translate([i*d/2, 0]) square(a, center=true);
-                translate([a.x/2, 0]) circle(d=d);
-            } else {
-                circle(d=size.x);
-            }
+        if (size.x < size.y) stadium(size.y - size.x, d=size.x, a=90);
+        else if (size.y < size.x) stadium(size.x - size.y, d=size.y);
+        else circle(d=size.x);
+    } else stadium_fill([size, size]);
+}
+module semistadium(side, r=undef, d=undef, a=0, center=false) {
+    radius = is_undef(d) ? r : d/2;
+    angle = a+90;  // default orientation is up
+    u = [cos(angle), sin(angle)];
+    translate(center ? -u*(side+radius)/2 : [0, 0]) hull() {
+        rotate(angle) translate([side/2, 0])
+            square([max(side, epsilon), 2*radius], center=true);
+        translate(u*side) intersection() {
+            circle(radius);
+            rotate(angle) translate([radius, 0]) square(2*radius, center=true);
         }
-    } else semistadium([size, size]);
+    }
+}
+module semistadium_fill(size, center=false) {
+    if (is_list(size)) {
+        if (size.y < size.x)
+            semistadium(size.x - size.y/2, d=size.y, a=-90, center=center);
+        else
+            semistadium(size.y - size.x/2, d=size.x, center=center);
+    } else semistadium_fill([size, size], center=center);
 }
 
 module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
@@ -140,12 +137,12 @@ module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
     run = rise / tan(a);
     base = top + 2*[run, run];
     hull() {
-        linear_extrude(h) stadium(top);
-        linear_extrude(h - rise) stadium(base);
+        linear_extrude(h) stadium_fill(top);
+        linear_extrude(h - rise) stadium_fill(base);
     }
     if (groove) {
-        linear_extrude(h+gap) stadium(top);
-        linear_extrude(2*gap, center=true) stadium(base);
+        linear_extrude(h+gap) stadium_fill(top);
+        linear_extrude(2*gap, center=true) stadium_fill(base);
     }
 }
 
@@ -553,25 +550,21 @@ module card_well(v, a=Avee, gap=gap0) {
         rounded_square(Rint, well);
     raise(-gap) linear_extrude(floor0+2*gap) {
         // thumb round
-        intersection() {
-            translate([0, -vtray.y/2]) stadium([Dthumb, Dthumb+2*wall0]);
-            square(shell + 2*[gap, gap], center=true);
-        }
+        translate([0, -gap-vtray.y/2])
+            semistadium(wall0+gap, d=Dthumb);
         // bottom hole
         if (3*Dthumb < min(well.x, well.y)) {
             rounded_square(Dthumb/2, well - 2*[Dthumb, Dthumb]);
         } else if (2.5*Dthumb < well.y) {
-            dy = max(Dthumb, well.y - 2*Dthumb);
-            translate([0, Dthumb/4]) stadium([Dthumb, dy]);
+            dy = max(0, well.y - 2.5*Dthumb);
+            translate([0, Dthumb/4]) stadium(dy, d=Dthumb, a=90);
         } else if (3.5*Dthumb < well.x) {
             dx = (well.x-2*Dthumb)/2;
             dy = (well.y-2*Dthumb)/4;
             for (i=[-1,+1]) translate([i*dx, dy]) circle(d=Dthumb);
         } else {
-            intersection() {
-                translate([0, -vtray.y/2]) stadium([Dthumb, Dthumb/2+vtray.y]);
-                square(shell + 2*[gap, gap], center=true);
-            }
+            translate([0, -vtray.y]/2)
+                semistadium(vtray.y/2-Dthumb/3, d=Dthumb);
         }
     }
     raise() translate([0, wall0-vtray.y]/2)
@@ -597,10 +590,25 @@ module leaders_card_tray(color=undef) {
 }
 
 Vwonder = [20, 30.35, Hboard];
+function wonder_volume(n=3) = [Vwonder.x, Vwonder.y, n*Vwonder.z];
 module wonder_tile(n=3) {  // stored in stacks of 3
-    linear_extrude(n*Vwonder.z) semistadium([Vwonder.x, Vwonder.y]);
+    linear_extrude(n*Vwonder.z)
+        semistadium(Vwonder.y-Vwonder.x/2, d=Vwonder.x);
 }
-// TODO: wonder_well module
+module wonder_well(v, gap=gap0) {
+    vtray = v + [2*Rext, 2*Rext, Rext+floor0];
+    // well
+    raise() linear_extrude(vtray.z-floor0+gap)
+        offset(r=Rint) semistadium_fill([v.x, v.y]);
+    // index hole
+    margin = 2*Rext + Rint/2;
+    dcut = [qlayer(vtray.x-2*margin), vtray.y-margin];
+    translate([0, wall0/2-Rext])
+        wall_vee_cut([dcut.x, wall0, vtray.z], a=90);
+    translate([0, -Rext-gap, -gap]) linear_extrude(floor0+2*gap)
+        semistadium(dcut.y-dcut.x/2+gap, d=dcut.x);
+    echo(dcut);
+}
 
 Vwdeck = vdeck(9, yellow_sleeve, premium_sleeve, wide=true);
 Vwtray = [for (x=[  // round dimensions to even layers
@@ -609,32 +617,27 @@ Vwtray = [for (x=[  // round dimensions to even layers
     max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
 ]) qlayer(x)];
 module wonder_tray(color=undef) {
-    xtile = (Vwtray.x - 2*Rext - 3*Vwonder.x) / 2;  // wonder tile spacing
-    echo(xtile, xtile-2*Rint, Vwtray);
+    vtray = Vwtray;
+    vcards = Vwdeck;
+    vtiles = wonder_volume();
+    xtile = (vtray.x - 2*Rext - 3*vtiles.x) / 2;  // wonder tile spacing
+    echo(xtile, xtile-2*Rint, vtray);
     color(color) difference() {
-        prism(Vwtray.z, [Vwtray.x, Vwtray.y], r=Rext);
+        prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         // deck well
-        dwell = [Vwdeck.x, Vwdeck.y, max(Vwdeck.z, 3*Vwonder.z)];
-        translate([0, (Vwtray.y-dwell.y)/2-Rext]) rotate(180)
+        dwell = [vcards.x, vcards.y, max(vcards.z, vtiles.z)];
+        translate([0, (vtray.y-dwell.y)/2-Rext]) rotate(180)
             card_well(dwell);
         // wonder tile wells
-        dcut = [Vwonder.x-Rint-2*Rext, Vwonder.y+wall0/2+Rint/2-Rext];
-        for (i=[-1:+1]) translate([i*(xtile+Vwonder.x), 0]) {
-            translate([0, Rext-(Vwtray.y-Vwonder.y)/2])
-                raise() linear_extrude(Vwtray.z) offset(r=Rint)
-                    semistadium([Vwonder.x, Vwonder.y]);
-            translate([0, wall0/2-Vwtray.y/2]) {
-                wall_vee_cut([dcut.x, wall0, Vwtray.z], a=90);
-                linear_extrude(3*floor0, center=true)
-                    stadium([dcut.x, 2*dcut.y]);
-            }
-
-        }
+        twell = [vtiles.x, vtiles.y, max(vcards.z, vtiles.z)];
+        for (i=[-1:+1])
+            translate([i*(xtile+vtiles.x), Rext-vtray.y/2])
+                wonder_well(twell);
     }
-    %translate([0, (Vwtray.y-Vwdeck.y)/2-Rext, Vwdeck.z/2+floor0])
-        cube(Vwdeck, center=true);
+    %translate([0, (vtray.y-vcards.y)/2-Rext, vcards.z/2+floor0])
+        cube(vcards, center=true);
     %for (i=[-1:+1])
-        translate([i*(xtile+Vwonder.x), Rext-(Vwtray.y-Vwonder.y)/2, floor0])
+        translate([i*(xtile+vtiles.x), Rext-vtray.y/2, floor0])
         wonder_tile();
 }
 
@@ -730,10 +733,11 @@ module test_card_trays() {
     translate([0, 75+vgreen2.y/2]) card_tray(vgreen2);
     translate([-90-vyellow1.x/2, 0]) card_tray(vyellow1);
     translate([0, -75-vyellow2.y/2]) card_tray(vyellow2);
+    translate([0, -95-vyellow2.y - Vwtray.y/2]) wonder_tray();
     *card_well(Vleaders);
 
 }
-*test_card_trays();
+test_card_trays();
 
 *focus_frame();
 *focus_frame(+1);
@@ -746,6 +750,6 @@ module test_card_trays() {
 *map_tile_lid();
 *deck_box();
 *leaders_card_tray();
-wonder_tray();
+*wonder_tray();
 
 *rotate(45) organizer();
