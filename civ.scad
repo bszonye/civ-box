@@ -757,29 +757,28 @@ module organizer() {
         }
     }
     // everything above the bar
-    rotate(-45) translate([0, Rext+gap0]) {
+    rotate(135) translate([0, -Rext+gap0]) {
         tier_info("wonders", Vwtray);
         tier_info("wonders stack",
             [2*Vwtray.x+gap0, Vwtray.y, 2*Vwtray.z]);
         tier_info("leaders", Vltray);
         tier_info("deck box", Vdbox);
-        translate([0, Vdbox.y/2]) deck_box(color=player_colors[0]);
-        translate([0, Vdbox.y+gap0]) {
-            // wonder trays
-            for (i=[-1,+1]) for (j=[0,1])
-                translate([i*(gap0+Vwtray.x)/2, Vwtray.y/2, j*Vwtray.z])
-                    wonders_tray();
-            // city states
-            raise(2*Vwtray.z)
-            for (j=[0,1]) translate([0, Vctray.y/2, j*Vctray.z])
-                city_states_tray();
-            // leader tray
-            raise(2*Vwtray.z + 2*Vctray.z)
-                translate([0, card_tray_volume(Vleaders).y/2]) rotate(180)
-                leaders_card_tray(color=player_colors[0]);
-        }
-        // TODO: barbarians
-        // TODO: resources
+        // wonder trays
+        for (i=[-1,+1]) for (j=[0,1])
+            translate([i*(gap0+Vwtray.x)/2, -Vwtray.y/2, j*Vwtray.z])
+                wonders_tray();
+        // city states
+        raise(2*Vwtray.z)
+        for (j=[0,1]) translate([0, -Vctray.y/2, j*Vctray.z])
+            city_states_tray();
+        // leader tray
+        *raise(2*Vwtray.z + 2*Vctray.z)
+            translate([0, -card_tray_volume(Vleaders).y/2])
+            leaders_card_tray(color=player_colors[0]);
+        // TODO: event dials
+        // TODO: barbarian tokens
+        // TODO: natural wonders & resource tokens
+        // TODO: trade tokens
         // TODO: turn this into a working player tray
         x4 = 145;
         y4 = 110;
@@ -788,30 +787,20 @@ module organizer() {
         y5 = 90;  // this one fits, but it's uneven
         echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
         pentabox = [
-            [x5/2, -y5],
-            [x5/2, -x5/2],
+            [x5/2, y5],
+            [x5/2, x5/2],
             [0, 0],
-            [-x5/2, -x5/2],
-            [-x5/2, -y5],
+            [-x5/2, x5/2],
+            [-x5/2, y5],
         ];
         points = [
-            [[x4/2+gap0, 0], 135, 2],
-            [[-(x4/2+gap0), 0], -135, 5],
-            [[0, y4+y5], 0, 3],
+            [[x4/2+gap0, 0], -135, 2],
+            [[-(x4/2+gap0), 0], 135, 5],
+            [[0, -y4-y5], 0, 3],
             // [[0, Vwtray.y+gap0 + y5], 0, 3],
         ];
-        for (p=points) translate(p[0]) rotate(p[1]) {
+        for (p=points) translate(p[0]) rotate(p[1])
             prism(tier_height(2), pentabox, r=Rext);
-            *color(player_colors[p[2]]) translate([0, 18])
-                linear_extrude(tier_height(2)) circle(d=50);
-            *color(player_colors[0])
-                linear_extrude(tier_height(2)-Rext) circle(d=75);
-            *linear_extrude(tier_height(2)-2*Rext) hull() {
-                translate([0, 18]) circle(d=50);
-                circle(d=75);
-                translate([0, -26]) square([135, 23], center=true);
-            }
-        }
     }
 }
 
@@ -847,4 +836,5 @@ module test_trays() {
 *city_states_tray();
 
 *test_trays();
-rotate(45) organizer();
+*rotate(45) organizer();  // bottom side
+rotate(-135) organizer();  // top side
