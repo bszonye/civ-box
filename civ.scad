@@ -1,4 +1,11 @@
 echo("\n\n====== CIV ORGANIZER ======\n\n");
+
+$fa = 15;  // 24 segments per circle (aligns with axes)
+$fs = 0.1;
+
+inch = 25.4;
+phi = (1+sqrt(5))/2;
+
 layer_height = 0.2;
 extrusion_width = 0.45;
 extrusion_overlap = layer_height * (1 - PI/4);
@@ -61,14 +68,13 @@ function vfit(vspec, vxmin, title="vfit") = let (vsmin = vround(vxmin))
     (vxmin.z <= vspec.z || vsmin.z <= vspec.z) ||
     (!vtrace && vtrace(title, vxmin, vsmin, vspec));
 function vtrace(title, vxmin, vsmin, vspec) =  // returns undef
-    echo(title) echo(vspec=vspec) echo(vsmin=vsmin) echo(vxmin=vxmin);
+    echo(title) echo(vspec=vspec) echo(vsmin=vsmin) echo(vxmin=vxmin)
+    echo(inch=[for (i=vspec) eround(i/inch)]);
 
-$fa = 15;  // 24 segments per circle (aligns with axes)
-$fs = min(layer_height/2, xspace(1)/2);
-
-inch = 25.4;
+// card dimensions
 card = [2.5*inch, 3.5*inch];  // standard playing card dimensions
-phi = (1+sqrt(5))/2;
+playing_card = 0.35;  // common unsleeved card thickness (UG assumes 0.325)
+leader_card = 0.45;  // thickness of Civilization leader sheets
 
 // Gamegenic sleeves
 sand_sleeve = [81, 122];  // Dixit
@@ -84,16 +90,17 @@ ruby_sleeve = [46, 71];  // Mini European
 green_sleeve = [59, 91];  // Standard American
 yellow_sleeve = [44, 67];  // Mini American
 catan_sleeve = [56, 82];  // Catan (English)
+
 // Sleeve Kings sleeves
 super_large_sleeve = [104, 129];
 
-playing_card = 0.35;  // common unsleeved card thickness (UG assumes 0.325)
-leader_card = 0.45;  // thickness of Civilization leader sheets
+// sleeve thickness
 no_sleeve = 0;
 penny_sleeve = 0.08;  // 40 micron sleeves (Mayday)
 thick_sleeve = 0.12;  // 60 micron sleeves (Sleeve Kings)
 premium_sleeve = 0.2;  // 100 micron sleeves (Gamegenic)
 double_sleeve = 0.3;  // premium sleeve + inner sleeve
+
 function card_count(h, quality=no_sleeve, card=playing_card) =
     floor(d / (card + quality));
 function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
@@ -202,7 +209,8 @@ module box(size, wall=1, frame=false, a=0) {
 Nplayers = 5;
 Nmaps = 16;  // number of map and water tiles
 Hboard = 2.25;  // tile & token thickness
-Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
+Dcoin = 3/4*inch;  // trade & resource token diameter
+Rhex = 3/4*inch;  // hex major radius (center to vertex)
 Rhex1 = 18;  // radius of single hex tiles
 Hcap = clayer(4);  // total height of lid + plug
 Vfocus5 = [371, 5*Hboard, 21.2];
@@ -726,7 +734,7 @@ module city_states_tray(color=undef) {
             square(ucards, center=true);
         }
         // use a bottom index hole only, smaller than the hex tile
-        linear_extrude(3*floor0, center=true) circle(d=ceil(2*rhex));
+        linear_extrude(3*floor0, center=true) circle(floor(rhex));
     }
     %raise() {
         for (i=[-1,+1]) raise(vcards.z * (1+i/2)/2)
@@ -738,7 +746,7 @@ module city_states_tray(color=undef) {
 module tier_info(name, v) {
     h = v.z;
     echo(name);
-    echo(v=v, inches=[for (i=v/25.4) eround(i)]);
+    echo(v=v, inches=[for (i=v/inch) eround(i)]);
     echo(h=h, n=tier_number(h), c=tier_ceil(h), r=tier_room(h));
 }
 
@@ -788,7 +796,7 @@ module organizer() {
             translate([(Vtray.x-Vctray.x)/2, -Vctray.y/2, j*(Vctray.z+gap0)])
             city_states_tray();
         // leader tray
-        raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
+        *raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
             translate([0, -Vltray.y/2])
             leaders_card_tray(color=player_colors[0]);
         // TODO: event dials
@@ -796,9 +804,9 @@ module organizer() {
         // TODO: natural wonders & resource tokens
         // TODO: trade tokens
         // TODO: turn this into a working player tray
-        x4 = 145;
-        y4 = 110;
-        x5 = 145;
+        x4 = Vtray.x + 2;
+        y4 = Vtray.y + 1;
+        x5 = 135;
         // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
         y5 = 90;  // this one fits, but it's uneven
         // echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
