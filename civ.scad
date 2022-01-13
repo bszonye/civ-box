@@ -213,8 +213,8 @@ Dcoin = 3/4*inch;  // trade & resource token diameter
 Rhex = 3/4*inch;  // hex major radius (center to vertex)
 Rhex1 = 18;  // radius of single hex tiles
 Hcap = clayer(4);  // total height of lid + plug
-Vfocus5 = [371, 5*Hboard, 21.2];
-Vfocus4 = [309, 4*Hboard, 21.6];
+Vfocus5 = [371, 21.2, 5*Hboard];
+Vfocus4 = [309, 21.6, 4*Hboard];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
 
@@ -234,6 +234,7 @@ player_colors = [
     "springgreen",
     "aqua",
     "mediumpurple",
+    "#202020",
 ];
 
 // container metrics
@@ -345,92 +346,85 @@ module focus_bar(v, color=5) {
     module focus(n, cut=false) {
         origin = [-60 * (k+1)/2, 0];
         translate(origin + [60 * n, 0]) if (cut) {
-            cube([50, 2*v.y, 12], center=true);
+            cube([50, 12, 2*v.z], center=true);
         } else {
             difference() {
-                color("tan", 0.5) cube([50, v.y, 12], center=true);
-                cube([48, 2*v.y, 10], center=true);
+                color("tan", 0.5) cube([50, 12, v.z], center=true);
+                cube([48, 10, 2*v.z], center=true);
             }
-            color("olivedrab", 0.5) cube([48, v.y, 10], center=true);
+            color("olivedrab", 0.5) cube([48, 10, v.z], center=true);
         }
     }
-    difference() {
-        color("tan", 0.5) cube(v, center=true);
-        cube([k*60, 2*v.y, 16], center=true);
+    raise(v.z/2) {
+        difference() {
+            color("tan", 0.5) cube(v, center=true);
+            cube([k*60, 16, 2*v.z], center=true);
+        }
+        color(is_num(color) ? player_colors[color] : color, 0.5) difference() {
+            cube([k*60, 16, v.z], center=true);
+            for (n=[1:k]) focus(n, cut=true);
+        }
+        for (n=[1:k]) focus(n);
     }
-    color(is_num(color) ? player_colors[color] : color, 0.5) difference() {
-        cube([k*60, v.y, 16], center=true);
-        for (n=[1:k]) focus(n, cut=true);
-    }
-    for (n=[1:k]) focus(n);
 }
 
+// TODO: switch to a flat 15mm tray
 Hshelf4 = Vfocus4.z + Rint;
 Hshelf5 = Vfocus5.z + Rext;
-Vfframe = [for (x=[  // round dimensions to even layers
+Vfframe0 = [  // minimum size
     norm([Vinterior.x, Vinterior.y]),  // diagonal length
-    max(Vfocus4.y, Vfocus5.y) + 2*Rext - Rint,  // 1mm narrower than usual
-    floor0 + Hshelf4 + Hshelf5,
-]) qlayer(x)];
-module focus_frame(section=undef, xspread=0, color=undef) {
+    2*max(Vfocus4.y, Vfocus5.y) + 3*wall0 + 2*Rint,
+    max(Vfocus4.z, Vfocus5.z) + floor0 + Rint,
+];
+Vfframe = vround([Vfframe0.x, Vfframe0.y, Htop]);
+assert(vfit(Vfframe, Vfframe0, "FOCUS BAR FRAME"));
+module focus_frame(section=undef, xspread=0, gap=gap0, color=undef) {
     // section:
     // undef = whole part
     // -1 = left only
     //  0 = joiner only
     // +1 = right only
 
-    // wall thicknesses
-    f5wall = wall0;
-    f4wall = qwall((Vfocus5.y - Vfocus4.y) / 2 + wall0);
     // well sizes
-    f5well = [Vfocus5.x + 2*Rint, Vfframe.y - 2*f5wall];
-    f4well = [Vfocus4.x + 2*Rint, Vfframe.y - 2*f4wall];
+    ywell = (Vfframe.y - 3*wall0) / 2;
+    f5well = [Vfocus5.x+2*Rint, ywell];
+    f4well = [Vfocus4.x+2*Rint, ywell];
+    y0 = -f5well.y/2-wall0;
     // space between sections
     xjoint = 40;
     xspan = xspread + xjoint;
 
     module joiner_tongue(groove=false) {
+        // TODO: thumb rounds
         d = Vfframe.y/2;
-        top = [xspan + 3*d, d];
-        translate([0, Vfframe.y/2]) tongue(top, groove=groove);
+        top = [xspan + 2*d, d];
+        nudge = groove ? gap : 0;
+        translate([0, y0+Vfframe.y/2]) {
+            tongue(top, groove=groove);
+            prism(Vfframe.z + nudge, [top.x-gap+nudge, wall0+nudge]);
+        }
     }
     module riser() {
         side = sign(section);
-        y0 = 0;
-        y1 = Vfframe.y;
-        x0 = Vfframe.x/2 + Rext;
-        x1 = x0 - Vfframe.y;
-        x2 = x1 - 2*Rext;
-        corner = [[x0, y0], [x1, y1], [x2, y1], [x2, y0]];
+        y1 = 0;
+        y2 = y0 + Vfframe.y;
+        x1 = Vfframe.x/2;
+        x2 = x1+y0;
+        x3 = x1-y2;
+        x4 = x3-2*Rext;
+        corner = [[x1, y1], [x3, y2], [x4, y2], [x4, y0], [x2, y0]];
         color(color) scale([sign(section), 1]) difference() {
             // shell
             linear_extrude(Vfframe.z) hull() {
                 offset(r=Rext) offset(r=-Rext) polygon(corner);
-                translate([xjoint/2, 0]) square(y1);
+                translate([xjoint/2, y0]) square(y2-y0);
             }
-            translate([0, Vfframe.y/2, floor0]) {
-                wall_vee_cut([xjoint, Vfframe.y, Vfframe.z-floor0]);
+            raise() {
+                wall_vee_cut([xjoint, 2*Vfframe.y, Vfframe.z-floor0]);
                 // focus bar wells
-                prism(Vfframe.z, f4well, r=Rint);
-                raise(Hshelf4) prism(Vfframe.z, f5well, r=Rint);
-                // bottom well taper
-                hull() {
-                    taper = (f5well.y - f4well.y) / 2;
-                    rise = taper * tan(Avee);
-                    htaper = Hshelf4-rise/2;
-                    f4top = [f4well.x, f5well.y];
-                    raise(htaper-rise/2) prism(Vfframe.z, f4well, r=Rint);
-                    raise(htaper+rise/2) prism(Vfframe.z, f4top, r=Rint);
-                }
-            }
-            // trestle lattice
-            translate([xjoint/2, 0]) {
-                dstrut=4.8;
-                for (i=[0:5]) lattice_cut(Vfframe, i, h0=floor0);
-                *for (i=[12:13])
-                    lattice_cut(Vfframe, i, 1, h0=floor0, tiers=2);
-                *for (i=[13:14])
-                    lattice_cut(Vfframe, i, 0, h0=floor0, tiers=2);
+                prism(Vfframe.z, f5well, r=Rint);
+                translate([0, y2-wall0-f4well.y/2])
+                    prism(Vfframe.z, f4well, r=Rint);
             }
             // joiner groove
             joiner_tongue(groove=true);
@@ -442,23 +436,24 @@ module focus_frame(section=undef, xspread=0, color=undef) {
     } else if (section == 0) {
         // joiner only
         color(color) {
-            translate([0, Vfframe.y/2]) linear_extrude(floor0)
-                square([xspan-gap0, Vfframe.y], center=true);
+            translate([0, y0+Vfframe.y/2]) linear_extrude(floor0)
+                square([xspan-gap, Vfframe.y], center=true);
             joiner_tongue();
         }
     } else {
         // combine everything
         focus_frame(+1, color=color);
         focus_frame(-1, color=color);
+        focus_frame(0, color=color);
         color(color) {
-            translate([0, Vfframe.y/2]) linear_extrude(floor0) {
-                square([xjoint*3+2*gap0, Vfframe.y], center=true);
+            translate([0, y0+Vfframe.y/2]) linear_extrude(floor0) {
+                square([xjoint*3+2*gap, Vfframe.y], center=true);
             }
         }
         // ghost focus bars
-        %translate([0, Vfframe.y/2]) raise() {
-            raise(Vfocus4.z/2) focus_bar(Vfocus4);
-            raise(Vfocus4.z + Rint + Vfocus5.z/2) focus_bar(Vfocus5);
+        %raise() {
+            focus_bar(Vfocus5);
+            translate([0, y0+Vfframe.y-wall0-f4well.y/2]) focus_bar(Vfocus4);
         }
     }
 }
@@ -560,7 +555,7 @@ module map_tile_stack(color=undef) {
 
 function deck_box_volume(v) = [for (x=[  // round dimensions to even layers
     v.y + 2*Rext,
-    v.z + 2*Rext,
+    v.z + 2*wall0,  // TODO: might be too snug for the common deck
     v.x + Rext + floor0]) qlayer(x)];
 function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
     v.x + 2*Rext,
@@ -569,7 +564,9 @@ function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
 
 // player focus decks: Gamegenic green sleeves
 Vdeck = vdeck(29, green_sleeve, premium_sleeve);
-Vdbox = deck_box_volume(Vdeck);
+Vdbox0 = deck_box_volume(Vdeck);
+Vdbox = [Vdbox0.x, 20, Vdbox0.z];
+assert(vfit(Vdbox, Vdbox, "DECK BOX"));
 module deck_box(v=Vdeck, color=undef) {
     vbox = deck_box_volume(v);
     well = vbox - 2*[wall0, wall0];
@@ -641,7 +638,7 @@ module card_tray(deck, tray=undef, color=undef) {
 Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 Vltray0 = card_tray_volume(Vleaders);
 Vltray = [Vtray.x, 110, 15];
-assert(vfit(Vltray, Vltray0, "LEADER SHEETS TRAY"));
+assert(vfit(Vltray, Vltray0, "LEADERS TRAY"));
 module leaders_card_tray(color=undef) {
     // TODO: expand this to exactly 135x110mm?
     card_tray(Vleaders, Vltray, color=color);
@@ -673,7 +670,7 @@ Vwtray0 = [
     Vwdeck.y + Rint + Vwonder.y + 3*Rext,
     max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
 ];
-Vwtray = vround([72.5, Vtray.y, Htier/2]);
+Vwtray = vround([72.5, Vtray.y, flayer(Htier/2)]);
 assert(vfit(Vwtray, Vwtray0, "WONDERS TRAY"));
 module wonders_tray(color=undef) {
     vtray = Vwtray;
@@ -715,14 +712,13 @@ Vctray0 = [  // minimum size to stagger two cards with both titles visible
     Vcdeck.z + max(Hboard + Rint, Rext) + floor0,
 ];
 Vctray = vround([62, Vtray.y, flayer(Htier/3)]);
-assert(vfit(Vctray, Vctray0, "CITY STATES TRAY"));
+assert(vfit(Vctray, Vctray0, "CITY-STATES TRAY"));
 module city_states_tray(color=undef) {
     vtray = Vctray;
     vcards = Vcdeck;
     ucards = [vcards.x, vcards.y];
     wcards = ucards + 2*[Rint, Rint];
     pcards = vtray/2 - wcards/2 - [wall0, wall0];
-    echo(2*pcards);
     ahex = 90;
     rhex = Rhex1 * sin(60);  // minor radius
     uhex = Rhex1 * [cos(abs(ahex % 60)), cos(abs(ahex % 60) - 30)];
@@ -760,30 +756,19 @@ module organizer() {
             raise(Vmanual2.z) cube(Vmanual2);
         }
     }
-    // focus frame bar and everything below
-    rotate(135) translate([0, -Rext]) {
-        // common deck boxes
-        rotate(-45)  // unique focus cards & victory cards
-            translate([Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
-            deck_box(color=player_colors[0]);
-        rotate(45)  // pre-expansion cards
-            translate([-Vdbox.x/4, Vinterior.y/2-Vdbox.y/2+Rext*cos(45)])
-            deck_box(color="#202020");
-        // focus bars
-        focus_frame(color=player_colors[0]);
-        translate([0, Vfframe.y+gap0]) {
-            // player deck boxes
-            deltadb = [Vdbox.x+gap0, Vdbox.y+gap0];
-            translate([0, Vdbox.y/2]) for (player=[1:5])
-                for (x=[-1, 0, +1]) for (y=[0, 1])
-                translate([(3-player)/2*deltadb.x, (1-player%2)*deltadb.y, 0])
-                    deck_box(color=player_colors[player]);
-            // map tiles
-            ystack = 5*Rhex + 2*Rext;
-            translate([0, 2*deltadb.y+ystack/2]) rotate(-90)
-                map_tile_stack(color=player_colors[0]);
-        }
-    }
+    // focus bars
+    raise(2*Htier) rotate(135) focus_frame(color=player_colors[0]);
+    // player deck boxes
+    deltadb = [Vdbox.x+gap0, Vdbox.y+gap0];
+    translate([Vdbox.x/2-Vfloor.x/2, Vdbox.y/2-Vfloor.y/2])
+        for (player=[0:6]) translate([0, player*deltadb.y, 0])
+            deck_box(color=player_colors[6-player]);
+    // map tiles
+    // TODO: move stuff around
+    xstack = 10*Rhex*sin(60) + 2*Rext;
+    ystack = 5*Rhex + 2*Rext;
+    translate([Vfloor.x/2-xstack/2, ystack/2-Vfloor.y/2]) rotate(-90)
+        map_tile_stack(color=player_colors[0]);
     // everything above the bar
     // TODO: distribute about 1mm space around this area
     rotate(135) translate([0, Vquad.y - norm(Vfloor)/2]) {
@@ -796,8 +781,8 @@ module organizer() {
             translate([(Vtray.x-Vctray.x)/2, -Vctray.y/2, j*(Vctray.z+gap0)])
             city_states_tray();
         // leader tray
-        *raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
-            translate([0, -Vltray.y/2])
+        raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
+            translate([0, -Vltray.y/2-10])
             leaders_card_tray(color=player_colors[0]);
         // TODO: event dials
         // TODO: barbarian tokens
@@ -823,7 +808,7 @@ module organizer() {
             [[0, -y4-y5], 0, [3, 0]],
             // [[0, Vwtray.y+gap0 + y5], 0, 3],
         ];
-        hbox = 25;
+        hbox = Htier - layer_height;
         for (p=points) for (j=[0:1])
             raise(j*(hbox+gap0)) translate(p[0]) rotate(p[1])
             color(player_colors[p[2][j]]) prism(hbox, pentabox, r=Rext);
@@ -862,5 +847,4 @@ module test_trays() {
 *city_states_tray();
 
 *test_trays();
-*rotate(45) organizer();  // bottom side
-rotate(-135) organizer();  // top side
+organizer();  // bottom side
