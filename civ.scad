@@ -48,18 +48,20 @@ function vceil(v) = [tceil(v.x), tceil(v.y), clayer(v.z)];
 function vfloor(v) = [tfloor(v.x), tfloor(v.y), flayer(v.z)];
 
 // fit checker for assertions
-// check whether a specified volume (vspec) is sufficiently large to contain
-// another volume, either exactly (vexact) or after rounding (vround).
-// will echo a summary table if vtrace is set or if the fit fails.
+// * vspec: desired volume specification
+// * vxmin: exact minimum size from calculations or measurements
+// * vsmin: soft minimum = vround(vxmin)
+// true if vspec is larger than either minimum, in all dimensions.
+// logs its parameters if vtrace is true or the comparison fails.
 vtrace = true;
-function vfit(vspec, vexact, title="vfit") = let (vround = vround(vexact))
-    (vtrace && vtrace(title, vexact, vround, vspec)) ||
-    (vexact.x <= vspec.x || vround.x <= vspec.x) &&
-    (vexact.y <= vspec.y || vround.y <= vspec.y) &&
-    (vexact.z <= vspec.z || vround.z <= vspec.z) ||
-    (!vtrace && vtrace(title, vexact, vround, vspec));
-function vtrace(title, vexact, vround, vspec) =  // returns undef
-    echo(title) echo(vspec=vspec) echo(vround=vround) echo(vexact=vexact);
+function vfit(vspec, vxmin, title="vfit") = let (vsmin = vround(vxmin))
+    (vtrace && vtrace(title, vxmin, vsmin, vspec)) ||
+    (vxmin.x <= vspec.x || vsmin.x <= vspec.x) &&
+    (vxmin.y <= vspec.y || vsmin.y <= vspec.y) &&
+    (vxmin.z <= vspec.z || vsmin.z <= vspec.z) ||
+    (!vtrace && vtrace(title, vxmin, vsmin, vspec));
+function vtrace(title, vxmin, vsmin, vspec) =  // returns undef
+    echo(title) echo(vspec=vspec) echo(vsmin=vsmin) echo(vxmin=vxmin);
 
 $fa = 15;  // 24 segments per circle (aligns with axes)
 $fs = min(layer_height/2, xspace(1)/2);
@@ -169,7 +171,8 @@ module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
 
 
 // box metrics
-Vinterior = [288, 288, 69];  // box interior
+Vfloor = [288, 288];  // box floor
+Vinterior = [Vfloor.x, Vfloor.y, 69];  // box interior
 Hwrap0 = 53;  // cover art wrap ends here
 Hwrap1 = 56;  // avoid stacks between 53-56mm total height
 module box(size, wall=1, frame=false, a=0) {
@@ -206,11 +209,6 @@ Vfocus5 = [371, 5*Hboard, 21.2];
 Vfocus4 = [309, 4*Hboard, 21.6];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
 Vmanual2 = [7.5*inch, 9.5*inch, 1.6];  // approximate
-Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
-function tier_height(k) = k ? flayer(Hroom/k) : Vinterior.z;
-function tier_number(z) = floor(Hroom/z);
-function tier_ceil(z) = tier_height(tier_number(z));
-function tier_room(z) = tier_ceil(z) - z;
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 Gmap = [
@@ -239,6 +237,7 @@ Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
 Alid = 30;  // angle of lid chamfer
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
 Hchamfer = (Rext-Rplug) * tan(Alid);
+Avee = 65;  // angle for index v-notches and lattices
 Dthumb = 25;  // index hole diameter
 Gbox = [
     [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
@@ -252,14 +251,23 @@ Ghole = [
     [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
 ];
 
-Avee = 65;
-Hshelf4 = Vfocus4.z + Rint;
-Hshelf5 = Vfocus5.z + Rext;
-Vfframe = [for (x=[  // round dimensions to even layers
-    norm([Vinterior.x, Vinterior.y]),  // diagonal length
-    max(Vfocus4.y, Vfocus5.y) + 2*Rext - Rint,  // 1mm narrower than usual
-    floor0 + Hshelf4 + Hshelf5,
-]) qlayer(x)];
+// vertical layout
+Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
+function tier_height(k) = k ? flayer(Hroom/k) : Vinterior.z;
+function tier_number(z) = floor(Hroom/z);
+function tier_ceil(z) = tier_height(tier_number(z));
+function tier_room(z) = tier_ceil(z) - z;
+
+// general layout
+// designed around box quadrants with some diagonal space across the center
+// reserved for focus bar storage.  the focus bars themselves sit to one side,
+// but the walls span the midline for stabilitiy.
+Rfloor = norm(Vfloor) / 2;  // major radius of box = 203.64mm
+Vquad = [200, 200];  // box quadrant area (center to corners)
+Vtray = [145/2, 85];  // small tray block
+// main tier heights: two thick layers + one thinner top layer
+Htier = 25;
+Htop = 15;
 
 module prism(h, shape=1, r=0, scale=1) {
     // TODO: calculate scale from bounding boxes?
@@ -323,6 +331,7 @@ module wall_vee_cut(size, a=Avee, gap=gap0) {
     }
 }
 
+// focus bar components & containers
 module focus_bar(v, color=5) {
     k = floor(v.x / 60);
     module focus(n, cut=false) {
@@ -348,6 +357,13 @@ module focus_bar(v, color=5) {
     for (n=[1:k]) focus(n);
 }
 
+Hshelf4 = Vfocus4.z + Rint;
+Hshelf5 = Vfocus5.z + Rext;
+Vfframe = [for (x=[  // round dimensions to even layers
+    norm([Vinterior.x, Vinterior.y]),  // diagonal length
+    max(Vfocus4.y, Vfocus5.y) + 2*Rext - Rint,  // 1mm narrower than usual
+    floor0 + Hshelf4 + Hshelf5,
+]) qlayer(x)];
 module focus_frame(section=undef, xspread=0, color=undef) {
     // section:
     // undef = whole part
@@ -648,7 +664,7 @@ Vwtray0 = [
     Vwdeck.y + Rint + Vwonder.y + 3*Rext,
     max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
 ];
-Vwtray = vround([72.4, 85, Vwtray0.z]);
+Vwtray = vround([145/2, 85, Htier/2]);
 assert(vfit(Vwtray, Vwtray0, "WONDERS TRAY"));
 module wonders_tray(color=undef) {
     vtray = Vwtray;
@@ -662,9 +678,9 @@ module wonders_tray(color=undef) {
     wcards = [
         vcards.x + slack.x,
         vcards.y + min(slack.y, Rint),
-        max(vcards.z, vtiles.z),
+        vtray.z - Rext - floor0,
     ];
-    wtiles = [vtiles.x, vtiles.y, max(vcards.z, vtiles.z)];
+    wtiles = [vtiles.x, vtiles.y, vtray.z - Rext - floor0];
     xtile = (vtray.x-wall0)/3 - vtiles.x;  // wonder tile x-spacing
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
@@ -684,34 +700,35 @@ module wonders_tray(color=undef) {
 }
 
 Vcdeck = vdeck(4, yellow_sleeve, premium_sleeve);
-Vctray0 = [  // exact size
-    3 * (Vcdeck.x + Rint + Rext) + wall0,
-    1 * (Vcdeck.y + Rint + Rext) + wall0,
+Vctray0 = [  // minimum size to stagger two cards with both titles visible
+    Vcdeck.x + 15 + 2*Rext,
+    Vcdeck.y + 12 + 2*Rext,
     Vcdeck.z + max(Hboard + Rint, Rext) + floor0,
 ];
-Vctray = vround([145, 85, Vctray0.z]);
+Vctray = vround([145/2, 85, flayer(Htier/3)]);
 assert(vfit(Vctray, Vctray0, "CITY STATES TRAY"));
-tier_info("city states", Vctray);
-tier_info("city states stack", [Vctray.x, Vctray.y, 2*Vctray.z]);
 module city_states_tray(color=undef) {
     vtray = Vctray;
     vcards = Vcdeck;
-    wcards = [(vtray.x-wall0)/3-Rint-Rext, vcards.y, vcards.z+Hboard];
-    xwell = (vtray.x-wall0)/3-vcards.x;
+    ucards = [vcards.x, vcards.y];
+    wcards = ucards + 2*[Rint, Rint];
+    pcards = vtray/2 - wcards/2 - [wall0, wall0];
     ahex = 90;
-    rhex = Rhex1 * [cos(abs(ahex % 60)), cos(abs(ahex % 60) - 30)];
-    pcards = [0, (wcards.y-vtray.y)/2+Rext];
-    phex = [wcards.x/2-rhex.x, vtray.y/2-Rext-rhex.y];
+    rhex = Rhex1 * sin(60);  // minor radius
+    uhex = Rhex1 * [cos(abs(ahex % 60)), cos(abs(ahex % 60) - 30)];
+    phex = [vtray.x/2-Rext-uhex.x, vtray.y/2-Rext-uhex.y];
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
-        for (i=[-1:+1]) translate([i*(xwell+vcards.x), 0]) {
-            translate(pcards) card_well(wcards);
-            raise() translate(phex) rotate(ahex) linear_extrude(vtray.z)
-                offset(r=Rint) hex_poly(r=Rhex1);
+        for (i=[-1,+1]) translate(i*pcards) {
+            raise() prism(vtray.z, wcards, r=Rint);
         }
+        // use a bottom index hole only, smaller than the hex tile
+        linear_extrude(3*floor0, center=true) circle(d=ceil(2*rhex));
+        echo(Dthumb=Dthumb, Dhex=2*Rhex1, dhex=2*rhex, round(Rhex1+rhex));
     }
-    %for (i=[-1:+1]) translate([i*(xwell+vcards.x), 0, floor0]) {
-        raise(vcards.z/2) translate(pcards) cube(vcards, center=true);
+    %raise() {
+        for (i=[-1,+1]) raise(vcards.z * (1+i/2)/2)
+            translate(i*pcards) prism(vcards.z/2, ucards, r=Rint);
         raise(vcards.z) translate(phex) rotate(ahex) hex_tile(r=Rhex1);
     }
 }
@@ -719,7 +736,8 @@ module city_states_tray(color=undef) {
 module tier_info(name, v) {
     h = v.z;
     echo(name);
-    echo(v=v, h=h, n=tier_number(h), c=tier_ceil(h), r=tier_room(h));
+    echo(v=v, inches=[for (i=v/25.4) eround(i)]);
+    echo(h=h, n=tier_number(h), c=tier_ceil(h), r=tier_room(h));
 }
 
 module organizer() {
@@ -757,23 +775,19 @@ module organizer() {
         }
     }
     // everything above the bar
-    rotate(135) translate([0, -Rext+gap0]) {
-        tier_info("wonders", Vwtray);
-        tier_info("wonders stack",
-            [2*Vwtray.x+gap0, Vwtray.y, 2*Vwtray.z]);
-        tier_info("leaders", Vltray);
-        tier_info("deck box", Vdbox);
+    // TODO: distribute about 1mm space around this area
+    rotate(135) translate([0, Vquad.y - norm(Vfloor)/2]) {
         // wonder trays
-        for (i=[-1,+1]) for (j=[0,1])
-            translate([i*(gap0+Vwtray.x)/2, -Vwtray.y/2, j*Vwtray.z])
+        for (j=[0:3])
+            translate([-(gap0+Vwtray.x)/2, -Vwtray.y/2, j*(Vwtray.z+gap0)])
                 wonders_tray();
         // city states
-        raise(2*Vwtray.z)
-        for (j=[0,1]) translate([0, -Vctray.y/2, j*Vctray.z])
+        for (j=[0:5])
+            translate([Vctray.x/2, -Vctray.y/2, j*(Vctray.z+gap0)])
             city_states_tray();
         // leader tray
-        *raise(2*Vwtray.z + 2*Vctray.z)
-            translate([0, -card_tray_volume(Vleaders).y/2])
+        *raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
+            translate([0, -Vltray.y/2])
             leaders_card_tray(color=player_colors[0]);
         // TODO: event dials
         // TODO: barbarian tokens
@@ -794,13 +808,15 @@ module organizer() {
             [-x5/2, y5],
         ];
         points = [
-            [[x4/2+gap0, 0], -135, 2],
-            [[-(x4/2+gap0), 0], 135, 5],
-            [[0, -y4-y5], 0, 3],
+            [[x4/2+gap0, 0], -135, [1, 2]],
+            [[-(x4/2+gap0), 0], 135, [4, 5]],
+            [[0, -y4-y5], 0, [3, 0]],
             // [[0, Vwtray.y+gap0 + y5], 0, 3],
         ];
-        for (p=points) translate(p[0]) rotate(p[1])
-            prism(tier_height(2), pentabox, r=Rext);
+        hbox = 25;
+        for (p=points) for (j=[0:1])
+            raise(j*(hbox+gap0)) translate(p[0]) rotate(p[1])
+            color(player_colors[p[2][j]]) prism(hbox, pentabox, r=Rext);
     }
 }
 
@@ -815,7 +831,7 @@ module test_trays() {
     translate([0, 75+vgreen2.y/2]) card_tray(vgreen2);
     translate([-90-vyellow1.x/2, 0]) card_tray(vyellow1);
     translate([0, -75-vyellow2.y/2]) card_tray(vyellow2);
-    translate([10+Rext+vyellow2.x/2, -95-vyellow2.y]) {
+    translate([0, -95-vyellow2.y]) {
         translate([10+Vwtray.x/2, -Vwtray.y/2]) wonders_tray();
         translate([-10-Vctray.x/2, -Vctray.y/2]) city_states_tray();
     }
