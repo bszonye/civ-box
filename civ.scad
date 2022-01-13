@@ -264,7 +264,7 @@ function tier_room(z) = tier_ceil(z) - z;
 // but the walls span the midline for stabilitiy.
 Rfloor = norm(Vfloor) / 2;  // major radius of box = 203.64mm
 Vquad = [200, 200];  // box quadrant area (center to corners)
-Vtray = [145/2, 85];  // small tray block
+Vtray = [135, 85];  // small tray block
 // main tier heights: two thick layers + one thinner top layer
 Htier = 25;
 Htop = 15;
@@ -579,12 +579,9 @@ module deck_box(v=Vdeck, color=undef) {
     %raise(floor0 + Vdeck.x/2) rotate([0, 90, 90]) cube(Vdeck, center=true);
 }
 
-// leader sheets: thick card with Sleeve Kings super large sleeve
-Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
-Vltray = card_tray_volume(Vleaders);
-
-module card_well(v, a=Avee, gap=gap0) {
-    vtray = card_tray_volume(v);
+module card_well(deck, tray=undef, a=Avee, gap=gap0) {
+    // TODO: improve conversions between deck, well, and shell sizes
+    vtray = tray ? tray : card_tray_volume(deck);
     shell = [vtray.x, vtray.y];
     well = shell - 2*[wall0, wall0];
     raise() linear_extrude(vtray.z-floor0+gap)
@@ -620,22 +617,26 @@ module card_well(v, a=Avee, gap=gap0) {
         wall_vee_cut([Dthumb, wall0, vtray.z-floor0], a=a, gap=gap);
 }
 
-module card_tray(v, color=undef) {
-    // TODO: round height to a simple fraction of Hroom?
-    // TODO: round sizes up to convenient multiples (1mm, 5mm, etc)?
-    vtray = card_tray_volume(v);
+module card_tray(deck, tray=undef, color=undef) {
+    vtray = tray ? tray : card_tray_volume(deck);
     shell = [vtray.x, vtray.y];
     well = shell - [2*wall0, 2*wall0];
     color(color) difference() {
         linear_extrude(vtray.z) rounded_square(Rext, shell);
-        card_well(v);
+        card_well(deck, vtray);
     }
     // card stack
-    %raise(floor0 + v.z/2) cube(v, center=true);
+    %raise(floor0 + deck.z/2) cube(deck, center=true);
 }
+
+// leader sheets: thick card with Sleeve Kings super large sleeve
+Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
+Vltray0 = card_tray_volume(Vleaders);
+Vltray = [Vtray.x, 110, 15];
+assert(vfit(Vltray, Vltray0, "LEADER SHEETS TRAY"));
 module leaders_card_tray(color=undef) {
     // TODO: expand this to exactly 135x110mm?
-    card_tray(Vleaders, color=color);
+    card_tray(Vleaders, Vltray, color=color);
 }
 
 Vwonder = [20, 30.35, Hboard];
@@ -664,7 +665,7 @@ Vwtray0 = [
     Vwdeck.y + Rint + Vwonder.y + 3*Rext,
     max(Vwdeck.z, 3*Vwonder.z) + Rext + floor0,
 ];
-Vwtray = vround([145/2, 85, Htier/2]);
+Vwtray = vround([72.5, Vtray.y, Htier/2]);
 assert(vfit(Vwtray, Vwtray0, "WONDERS TRAY"));
 module wonders_tray(color=undef) {
     vtray = Vwtray;
@@ -701,11 +702,11 @@ module wonders_tray(color=undef) {
 
 Vcdeck = vdeck(4, yellow_sleeve, premium_sleeve);
 Vctray0 = [  // minimum size to stagger two cards with both titles visible
-    Vcdeck.x + 15 + 2*Rext,
+    Vcdeck.x + 12 + 2*Rext,
     Vcdeck.y + 12 + 2*Rext,
     Vcdeck.z + max(Hboard + Rint, Rext) + floor0,
 ];
-Vctray = vround([145/2, 85, flayer(Htier/3)]);
+Vctray = vround([62, Vtray.y, flayer(Htier/3)]);
 assert(vfit(Vctray, Vctray0, "CITY STATES TRAY"));
 module city_states_tray(color=undef) {
     vtray = Vctray;
@@ -713,22 +714,23 @@ module city_states_tray(color=undef) {
     ucards = [vcards.x, vcards.y];
     wcards = ucards + 2*[Rint, Rint];
     pcards = vtray/2 - wcards/2 - [wall0, wall0];
+    echo(2*pcards);
     ahex = 90;
     rhex = Rhex1 * sin(60);  // minor radius
     uhex = Rhex1 * [cos(abs(ahex % 60)), cos(abs(ahex % 60) - 30)];
     phex = [vtray.x/2-Rext-uhex.x, vtray.y/2-Rext-uhex.y];
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
-        for (i=[-1,+1]) translate(i*pcards) {
-            raise() prism(vtray.z, wcards, r=Rint);
+        raise() linear_extrude(vtray.z)
+        offset(r=-Rint) offset(r=2*Rint) for (i=[-1,+1]) translate(i*pcards) {
+            square(ucards, center=true);
         }
         // use a bottom index hole only, smaller than the hex tile
         linear_extrude(3*floor0, center=true) circle(d=ceil(2*rhex));
-        echo(Dthumb=Dthumb, Dhex=2*Rhex1, dhex=2*rhex, round(Rhex1+rhex));
     }
     %raise() {
         for (i=[-1,+1]) raise(vcards.z * (1+i/2)/2)
-            translate(i*pcards) prism(vcards.z/2, ucards, r=Rint);
+            translate(i*pcards) prism(vcards.z/2, ucards);
         raise(vcards.z) translate(phex) rotate(ahex) hex_tile(r=Rhex1);
     }
 }
@@ -779,14 +781,14 @@ module organizer() {
     rotate(135) translate([0, Vquad.y - norm(Vfloor)/2]) {
         // wonder trays
         for (j=[0:3])
-            translate([-(gap0+Vwtray.x)/2, -Vwtray.y/2, j*(Vwtray.z+gap0)])
+            translate([(Vwtray.x-Vtray.x)/2, -Vwtray.y/2, j*(Vwtray.z+gap0)])
                 wonders_tray();
         // city states
         for (j=[0:5])
-            translate([Vctray.x/2, -Vctray.y/2, j*(Vctray.z+gap0)])
+            translate([(Vtray.x-Vctray.x)/2, -Vctray.y/2, j*(Vctray.z+gap0)])
             city_states_tray();
         // leader tray
-        *raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
+        raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
             translate([0, -Vltray.y/2])
             leaders_card_tray(color=player_colors[0]);
         // TODO: event dials
@@ -799,7 +801,7 @@ module organizer() {
         x5 = 145;
         // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
         y5 = 90;  // this one fits, but it's uneven
-        echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
+        // echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
         pentabox = [
             [x5/2, y5],
             [x5/2, x5/2],
