@@ -159,23 +159,30 @@ module semistadium_fill(size, center=false) {
     } else semistadium_fill([size, size], center=center);
 }
 
-module tongue(size, h=floor0, a=60, groove=false, gap=gap0) {
+module tongue(size, h=floor0, h0=undef, h1=undef, h2=undef,
+              a=60, groove=false, gap=gap0) {
     // groove = false: positive image. gap is inset from the bounding box.
     // groove = true: negative image. gap is extended above top and below base.
-    top = size - (groove ? 0 : 1) * [gap, gap];
-    rise = flayer(h/2);
-    run = rise / tan(a);
-    base = top + 2*[run, run];
-    hull() {
-        linear_extrude(h) stadium_fill(top);
-        linear_extrude(h - rise) stadium_fill(base);
-    }
-    if (groove) {
-        linear_extrude(h+gap) stadium_fill(top);
-        linear_extrude(2*gap, center=true) stadium_fill(base);
-    }
-}
+    hroof = !is_undef(h2) ? h2 : h;  // height of column above tongue
+    hfloor = !is_undef(h1) ? h1 : h;  // height of tongue
+    hbevel = !is_undef(h0) ? h0 : hfloor/2;  // height of bevel
+    htop = groove ? hfloor+gap : min(hroof, hfloor+gap);
 
+    slope = tan(a);
+    vfloor = groove ? size : size - [gap, gap];
+    vbevel = vfloor + [2, 2] * (hfloor-hbevel) / slope;
+    vtop = vfloor + [2, 2] * (hfloor-htop) / slope;
+
+    // vtop is higher than vfloor if we're cutting a groove or extending up
+    // into a prism. this avoids some messy interactions between the hull and
+    // other objects at the same height like floors.
+    hull() {
+        linear_extrude(htop) stadium_fill(vtop);
+        linear_extrude(hbevel) stadium_fill(vbevel);
+    }
+    if (hroof != htop) linear_extrude(hroof) stadium_fill(vfloor);
+    if (groove) linear_extrude(2*gap, center=true) stadium_fill(vbevel);
+}
 
 // box metrics
 Vfloor = [288, 288];  // box floor
@@ -284,8 +291,8 @@ Htop = 15;
 
 module prism(h, shape=undef, r=undef, r1=undef, r2=undef, scale=1) {
     module curve() {
-        ri = r1 ? r1 : r ? r : 0;  // radius of inside turns
-        ro = r2 ? r2 : r ? r : 0;  // radius of outside turns
+        ri = !is_undef(r1) ? r1 : !is_undef(r) ? r : 0;  // inside turns
+        ro = !is_undef(r2) ? r2 : !is_undef(r) ? r : 0;  // outside turns
         if (ri || ro) offset(r=ro) offset(r=-ro-ri) offset(r=ri) children();
         else children();
     }
@@ -356,18 +363,19 @@ module focus_bar(v, color=5) {
             cube([50, 12, 2*v.z], center=true);
         } else {
             difference() {
-                color("tan", 0.5) cube([50, 12, v.z], center=true);
+                color("tan", 0.60) cube([50, 12, v.z], center=true);
                 cube([48, 10, 2*v.z], center=true);
             }
-            color("olivedrab", 0.5) cube([48, 10, v.z], center=true);
+            color("olivedrab", 0.60) cube([48, 10, v.z], center=true);
         }
     }
     raise(v.z/2) {
         difference() {
-            color("tan", 0.5) cube(v, center=true);
+            color("tan", 0.60) cube(v, center=true);
             cube([k*60, 16, 2*v.z], center=true);
         }
-        color(is_num(color) ? player_colors[color] : color, 0.5) difference() {
+        c = is_num(color) ? player_colors[color] : color;
+        color(c, 0.60) difference() {
             cube([k*60, 16, v.z], center=true);
             for (n=[1:k]) focus(n, cut=true);
         }
@@ -400,67 +408,72 @@ module focus_frame(section=undef, xspread=0, gap=gap0, color=undef) {
     // space between sections
     xjoint = 40;
     xspan = xspread + xjoint;
+    vtray = [Vfframe.x + xspread, Vfframe.y, Vfframe.z];
 
     module joiner_tongue(groove=false) {
-        // TODO: thumb rounds
-        d = Vfframe.y/2;
+        d = vtray.y/2;
         top = [xspan + 2*d, d];
-        nudge = groove ? gap : 0;
-        translate([0, y0+Vfframe.y/2]) {
-            tongue(top, groove=groove);
-            prism(Vfframe.z + nudge, [top.x-gap+nudge, wall0+nudge]);
+        translate([0, y0+vtray.y/2]) tongue(top, groove=groove, h2=vtray.z);
+    }
+    module joiner() {
+        intersection() {
+            tray();
+            union() {
+                joiner_tongue();
+                translate([0, y0+vtray.y/2])
+                    prism(vtray.z, [xspan-gap, vtray.y]);
+            }
         }
     }
-    module riser() {
-        side = sign(section);
+    module half(side) {
+        difference() {
+            intersection() {  // confine to one half
+                tray();
+                scale([side, 1]) translate([xspan/2, y0]) cube(vtray);
+            }
+            if (section) joiner_tongue(groove=true);  // subtract joiner
+        }
+    }
+    module tray() {
         y1 = 0;
-        y2 = y0 + Vfframe.y;
-        x1 = Vfframe.x/2;
+        y2 = y0 + vtray.y;
+        x1 = vtray.x/2;
         x2 = x1+y0;
         x3 = x1-y2;
         x4 = x3-2*Rext;
         corner = [[x1, y1], [x3, y2], [x4, y2], [x4, y0], [x2, y0]];
-        color(color) scale([sign(section), 1]) difference() {
+        color(color) difference() {
             // shell
-            linear_extrude(Vfframe.z) hull() {
+            linear_extrude(vtray.z) hull() for (i=[-1,+1]) scale([i, 1])
                 offset(r=Rext) offset(r=-Rext) polygon(corner);
-                translate([xjoint/2, y0]) square(y2-y0);
-            }
+            // focus bar wells
             raise() {
-                wall_vee_cut([xjoint, 2*Vfframe.y, Vfframe.z-floor0]);
-                // focus bar wells
-                prism(Vfframe.z, f5well, r=Rint);
+                prism(vtray.z, f5well, r=Rint);
                 translate([0, y2-wall0-f4well.y/2])
-                    prism(Vfframe.z, f4well, r=Rint);
+                    prism(vtray.z, f4well, r=Rint);
             }
-            // joiner groove
-            joiner_tongue(groove=true);
+            translate([0, y0+vtray.y/2]) {
+                raise() for (i=[-1,+1]) translate([0, i/2*(vtray.y-wall0)])
+                    wall_vee_cut([xspan, 2*wall0, vtray.z-floor0]);
+                // thumb rounds
+                for (i=[-1,+1])
+                    translate([0, i*(vtray.y/2+Dthumb/3), -gap0])
+                    prism(floor0+2*gap) circle(d=Dthumb);
+            }
         }
     }
     if (section) {
-        // half riser only
-        riser();
+        // one end half only
+        half(sign(section));
     } else if (section == 0) {
         // joiner only
-        color(color) {
-            translate([0, y0+Vfframe.y/2]) linear_extrude(floor0)
-                square([xspan-gap, Vfframe.y], center=true);
-            joiner_tongue();
-        }
+        joiner();
     } else {
-        // combine everything
-        focus_frame(+1, color=color);
-        focus_frame(-1, color=color);
-        focus_frame(0, color=color);
-        color(color) {
-            translate([0, y0+Vfframe.y/2]) linear_extrude(floor0) {
-                square([xjoint*3+2*gap, Vfframe.y], center=true);
-            }
-        }
-        // ghost focus bars
-        %raise() {
+        tray();  // whole tray
+        %raise() {  // ghost focus bars
             focus_bar(Vfocus5);
-            translate([0, y0+Vfframe.y-wall0-f4well.y/2]) focus_bar(Vfocus4);
+            translate([0, y0+vtray.y-wall0-f4well.y/2])
+                focus_bar(Vfocus4, color=2);
         }
     }
 }
@@ -770,9 +783,6 @@ module city_states_tray(color=undef) {
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
         raise() prism(vtray.z, vwell, r=Rint);
-        for (i=[-1,+1]) translate(i*pcards) {
-            square(ucards, center=true);
-        }
         // use a bottom index hole only, smaller than the hex tile
         linear_extrude(3*floor0, center=true) circle(floor(rhex));
     }
