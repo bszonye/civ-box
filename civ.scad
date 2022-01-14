@@ -489,6 +489,7 @@ module hex_lid(grid=Ghex, r=Rhex, color=undef) {
 }
 
 function hex_box_height(n=1) = clayer(floor0 + n*Hboard + Rtop);
+function hex_box_min_height(n=1) = qlayer(floor0 + n*Hboard + Rint);
 function sum(v) = v ? [for(p=v) 1]*v : 0;
 function stack_height(v=[], plug=false, lid=false) =
     sum([for (n=v) hex_box_height(n)]) +  // box heights
@@ -496,15 +497,16 @@ function stack_height(v=[], plug=false, lid=false) =
     (plug ? Hplug : 0) +  // plug below
     (lid ? sign(len(v))*clayer(Hseam) + Hlid : 0);  // lid above
 
-module hex_box(n=1, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
-    h = hex_box_height(n=n);
-    echo(h=h);
+module hex_box(n=1, h=undef, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
+    height = h ? h : hex_box_height(n=n);
+    hmin = hex_box_min_height(n);
+    assert(hmin <= height);
     color(color) difference() {
         // exterior
-        prism(h, r1=Rint, r2=Rext)
+        prism(height, r1=Rint, r2=Rext)
             offset(delta=Rext) hex_poly(grid=grid, r=r);
         // interior
-        raise() prism(h, r1=Rext, r2=Rint)
+        raise() prism(height, r1=Rext, r2=Rint)
             offset(delta=Rint) hex_poly(grid=grid, r=r);
     }
     // ghost tiles
@@ -526,15 +528,15 @@ module map_tile(n=1) {
 module map_tile_hole(gap=gap0) {
     raise(-Hplug-gap) prism(Hcap+2*gap, r=Rext) hex_poly(r=Rxhole);
 }
-module map_tile_box(n=Nmaps, color=undef) {
+module map_tile_box(n=Nmaps, h=undef, color=undef) {
     difference() {
-        hex_box(n=n, grid=Gbox, ghost=Gmap, color=color);
+        hex_box(n=n, h=h, grid=Gbox, ghost=Gmap, color=color);
         for (p=hex_points(Ghole)) translate(p)
             map_tile_hole();
     }
 }
 module map_tile_capitals(color=undef) {
-    map_tile_box(n=Nplayers, color=color);
+    map_tile_box(n=Nplayers, h=Htop, color=color);
 }
 module map_tile_lid(color=undef) {
     color(color) difference() {
@@ -557,9 +559,9 @@ module map_tile_plug(gap=gap0, color=undef) {
             offset(delta=-Rsnug-wall0) hex_poly(r=Rxhole);
     }
 }
-module map_hex_box(n=Nplayers, color=undef) {
+module map_hex_box(n=Nplayers, h=undef, color=undef) {
     difference() {
-        hex_box(n=n, grid=Ghex, color=color);
+        hex_box(n=n, h=h, grid=Ghex, color=color);
         map_tile_hole();
     }
 }
@@ -575,10 +577,10 @@ module raise_lid(v=[], plug=false) {
 module map_tile_stack(plug=true, lift=0, color=undef) {
     nmap = 16;
     ncap = 5;
-    map_tile_box(nmap, plug=plug, color=color);
+    map_tile_box(nmap, color=color);
     raise_lid([nmap+lift]) {
-        map_tile_box(ncap, plug=plug, color=color);
-        raise_lid([ncap+lift]) map_tile_lid(color=color);
+        map_tile_capitals(color=color);
+        raise(Htop+lift) map_tile_lid(color=color);
     }
 }
 
@@ -767,7 +769,6 @@ module city_states_tray(color=undef) {
     phex = [vtray.x/2-Rext-uhex.x, vtray.y/2-Rext-uhex.y];
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
-        echo("FOO");
         raise() prism(vtray.z, vwell, r=Rint);
         for (i=[-1,+1]) translate(i*pcards) {
             square(ucards, center=true);
@@ -876,9 +877,9 @@ module test_trays() {
 }
 
 *focus_frame();
-*focus_frame(+1);
-*focus_frame(-1);
-*focus_frame(0);
+focus_frame(+1);
+focus_frame(-1);
+focus_frame(0);
 *focus_frame(0, xspread=3);
 *raise(-floor0-gap0) focus_frame(0);
 *map_tile_box();
@@ -892,6 +893,7 @@ module test_trays() {
 *wonders_tray();
 *city_states_tray();
 
+*map_hex_box(h=15);
 *map_tile_stack(lift=3);
 *test_trays();
-organizer();
+*organizer();
