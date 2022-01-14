@@ -111,7 +111,7 @@ function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
 // basic metrics
 wall0 = xwall(4);
 floor0 = qlayer(wall0);
-gap0 = 0.1;
+gap0 = 0.1;  // TODO: clean up gap/cut/joint code
 
 function unit_axis(n) = [for (i=[0:1:2]) i==n ? 1 : 0];
 
@@ -212,7 +212,6 @@ Hboard = 2.25;  // tile & token thickness
 Dcoin = 3/4*inch;  // trade & resource token diameter
 Rhex = 3/4*inch;  // hex major radius (center to vertex)
 Rhex1 = 18;  // radius of single hex tiles
-Hcap = clayer(4);  // total height of lid + plug
 Vfocus5 = [371, 21.2, 5*Hboard];
 Vfocus4 = [309, 21.6, 4*Hboard];
 Vmanual1 = [8.5*inch, 11*inch, 1.6];  // approximate
@@ -239,13 +238,17 @@ player_colors = [
 
 // container metrics
 Hlid = floor0;  // height of cap lid
-Hplug = Hcap - Hlid;  // depth of lid below cap
-Rint = 1;  // internal corner radius (distance from contents to wall)
+Hplug = floor0;  // depth of lid below cap
+Hcap = Hlid+Hplug;  // total height of lid + plug
+
+Rsnug = 0*gap0;  // snug joint radius for friction fit
+Rlid = 1*gap0;  // lid joint radius (dx from lid/plug to container wall)
+Rint = 1;  // internal corner radius (dx from contents to container wall)
 Rext = Rint+wall0;  // external corner radius
-Rplug = Rint-gap0;  // internal plug radius (small gap to wall interior)
-Alid = 30;  // angle of lid chamfer
-Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
-Hchamfer = (Rext-Rplug) * tan(Alid);
+Rtop = Rint+floor0;  // vertical corner radius (TODO: convert from Rext)
+Rxhole = Rhex1*sin(60) - Rint;  // smaller than a single-hex tile
+
+Hseam = gap0;  // space between lid cap and box (display only)
 Avee = 65;  // angle for index v-notches and lattices
 Dthumb = 25;  // index hole diameter
 Gbox = [
@@ -259,6 +262,7 @@ Ghole = [
     [1.5, -4], [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
     [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
 ];
+Gplug = [ [1.5, -4], [1.5, 4], [-1.5, -2], [-1.5, 2], ];
 
 // vertical layout
 Hroom = ceil(Vinterior.z - Vmanual1.z - Vmanual2.z) - 1;
@@ -278,14 +282,17 @@ Vtray = [135, 85];  // small tray block
 Htier = 25;
 Htop = 15;
 
-module prism(h, shape=1, r=0, scale=1) {
-    // TODO: calculate scale from bounding boxes?
-    linear_extrude(h, scale=scale) offset(r=r) offset(r=-r)
-    if (is_list(shape) && is_list(shape[0])) {
-        polygon(shape);
-    } else {
-        square(shape, center=true);
+module prism(h, shape=undef, r=undef, r1=undef, r2=undef, scale=1) {
+    module curve() {
+        ri = r1 ? r1 : r ? r : 0;  // radius of inside turns
+        ro = r2 ? r2 : r ? r : 0;  // radius of outside turns
+        if (ri || ro) offset(r=ro) offset(r=-ro-ri) offset(r=ri) children();
+        else children();
     }
+    linear_extrude(height=h, scale=scale) curve()
+    if (is_undef(shape)) children();
+    else if (is_list(shape) && is_list(shape[0])) polygon(shape);
+    else square(shape, center=true);
 }
 
 module lattice_cut(v, i, j=0, h0=0, d=4.8, a=Avee, r=Rint,
@@ -469,20 +476,19 @@ module hex_poly(grid=Ghex, r=Rhex) {
 module hex_tile(n=1, grid=Ghex, r=Rhex) {
     linear_extrude(Hboard*n) hex_poly(grid=grid, r=r);
 }
-module hex_lid(grid=Ghex, r=Rhex) {
-    xy_min = hex_min(grid, r);
-    minkowski() {
-        linear_extrude(Hlid, center=false)
-            hex_poly(grid=grid, r=r);
-        mirror([0, 0, 1]) {
-            cylinder(h=Hplug, r=Rplug);
-            cylinder(h=Hchamfer, r1=Rext, r2=Rplug);
-        }
+module hex_lid(grid=Ghex, r=Rhex, color=undef) {
+    assert(Hcap == Hlid+Hplug);
+    color(color) {
+        // lid
+        prism(Hlid, r1=Rint, r2=Rext)
+            offset(delta=Rext) hex_poly(grid=grid, r=r);
+        // plug
+        raise(-Hplug) prism(Hcap, r1=Rext, r2=Rint)
+            offset(delta=Rint-Rlid) hex_poly(grid=grid, r=r);
     }
 }
 
-function hex_box_height(n=1, plug=false) =
-    clayer(floor0 + n*Hboard + Rint + Hplug) + (plug ? Hplug : 0);
+function hex_box_height(n=1) = clayer(floor0 + n*Hboard + Rtop);
 function sum(v) = v ? [for(p=v) 1]*v : 0;
 function stack_height(v=[], plug=false, lid=false) =
     sum([for (n=v) hex_box_height(n)]) +  // box heights
@@ -490,20 +496,16 @@ function stack_height(v=[], plug=false, lid=false) =
     (plug ? Hplug : 0) +  // plug below
     (lid ? sign(len(v))*clayer(Hseam) + Hlid : 0);  // lid above
 
-module hex_box(n=1, plug=false, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
-    h = hex_box_height(n=n, plug=false);
+module hex_box(n=1, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
+    h = hex_box_height(n=n);
+    echo(h=h);
     color(color) difference() {
         // exterior
-        union() {
-            linear_extrude(h, center=false)
-                offset(r=Rext) hex_poly(grid=grid, r=r);
-            if (plug) hex_lid(grid=grid, r=r);
-        }
+        prism(h, r1=Rint, r2=Rext)
+            offset(delta=Rext) hex_poly(grid=grid, r=r);
         // interior
-        raise() linear_extrude(h, center=false)
-            offset(r=Rext-wall0) hex_poly(grid=grid, r=r);
-        // lid chamfer
-        raise(h+Hseam) hex_lid(grid=grid);
+        raise() prism(h, r1=Rext, r2=Rint)
+            offset(delta=Rint) hex_poly(grid=grid, r=r);
     }
     // ghost tiles
     %raise(floor0) hex_tile(n=n, grid=(ghost ? ghost : grid), r=r);
@@ -521,51 +523,78 @@ module map_tile_poly() {
 module map_tile(n=1) {
     hex_tile(n=n, grid=Gmap);
 }
-module map_tile_box(n=Nmaps, plug=false, color=undef) {
+module map_tile_hole(gap=gap0) {
+    raise(-Hplug-gap) prism(Hcap+2*gap, r=Rext) hex_poly(r=Rxhole);
+}
+module map_tile_box(n=Nmaps, color=undef) {
     difference() {
-        hex_box(n=n, plug=plug, grid=Gbox, ghost=Gmap, color=color);
+        hex_box(n=n, grid=Gbox, ghost=Gmap, color=color);
         for (p=hex_points(Ghole)) translate(p)
-            linear_extrude(2*Hcap, center=true)
-            offset(r=Rext) offset(r=-Rhex/4-Rext) hex_poly();
+            map_tile_hole();
     }
 }
 module map_tile_capitals(color=undef) {
-    map_tile_box(n=Nplayers, plug=true, color=color);
+    map_tile_box(n=Nplayers, color=color);
 }
 module map_tile_lid(color=undef) {
     color(color) difference() {
         hex_lid(grid=Gbox);
-        for (p=hex_points(Ghole)) translate(p)
-            linear_extrude(2*Hcap, center=true)
-            offset(r=Rint) offset(delta=-Rhex/4-Rint) hex_poly();
+        for (p=hex_points(Ghole)) translate(p) map_tile_hole();
+    }
+}
+module map_tile_plug(gap=gap0, color=undef) {
+    assert(Hcap == Hlid+Hplug);
+    color(color) difference() {
+        union() {
+            // insert
+            prism(Hlid, r=Rext) offset(delta=-Rsnug) hex_poly(r=Rxhole);
+            // plug
+            raise(-Hplug) prism(Hplug, r1=Rext, r2=Rint)
+                offset(delta=Rint-Rlid) hex_poly();
+        }
+        // new index hole inset by 1 wall thickness
+        raise(-Hplug-gap) prism(Hcap+2*gap, r=Rint)
+            offset(delta=-Rsnug-wall0) hex_poly(r=Rxhole);
+    }
+}
+module map_hex_box(n=Nplayers, color=undef) {
+    difference() {
+        hex_box(n=n, grid=Ghex, color=color);
+        map_tile_hole();
+    }
+}
+module map_hex_lid(color=undef) {
+    color(color) difference() {
+        hex_lid(grid=Ghex);
+        map_tile_hole();
     }
 }
 module raise_lid(v=[], plug=false) {
     raise(stack_height(v, plug=plug, lid=true) - Hlid) children();
 }
-module map_tile_stack(color=undef) {
+module map_tile_stack(plug=true, lift=0, color=undef) {
     nmap = 16;
     ncap = 5;
-    map_tile_box(nmap, color=color);
-    raise_lid([nmap]) {
-        map_tile_box(ncap, plug=true, color=color);
-        raise_lid([ncap]) map_tile_lid(color=color);
+    map_tile_box(nmap, plug=plug, color=color);
+    raise_lid([nmap+lift]) {
+        map_tile_box(ncap, plug=plug, color=color);
+        raise_lid([ncap+lift]) map_tile_lid(color=color);
     }
 }
 
-function deck_box_volume(v) = [for (x=[  // round dimensions to even layers
+function deck_box_volume(v) = vround([
     v.y + 2*Rext,
-    v.z + 2*wall0,  // TODO: might be too snug for the common deck
-    v.x + Rext + floor0]) qlayer(x)];
-function card_tray_volume(v) = [for (x=[  // round dimensions to even layers
+    v.z + 2*wall0,  // TODO: might be too snug for the universal deck
+    v.x + Rtop + floor0]);
+function card_tray_volume(v) = vround([
     v.x + 2*Rext,
     v.y + 2*Rext,
-    v.z + Rext + floor0]) qlayer(x)];
+    v.z + Rtop + floor0]);
 
 // player focus decks: Gamegenic green sleeves
 Vdeck = vdeck(29, green_sleeve, premium_sleeve);
 Vdbox0 = deck_box_volume(Vdeck);
-Vdbox = [Vdbox0.x, 20, Vdbox0.z];
+Vdbox = vround([Vdbox0.x, 20, Vdbox0.z]);
 assert(vfit(Vdbox, Vdbox, "DECK BOX"));
 module deck_box(v=Vdeck, color=undef) {
     vbox = deck_box_volume(v);
@@ -705,10 +734,11 @@ module wonders_tray(color=undef) {
         wonder_tile();
 }
 
+Dcbanner = 12;  // width of the title banner on city-state cards
 Vcdeck = vdeck(4, yellow_sleeve, premium_sleeve);
 Vctray0 = [  // minimum size to stagger two cards with both titles visible
-    Vcdeck.x + 12 + 2*Rext,
-    Vcdeck.y + 12 + 2*Rext,
+    Vcdeck.x + Dcbanner + 2*Rext,
+    Vcdeck.y + Dcbanner + 2*Rext,
     Vcdeck.z + max(Hboard + Rint, Rext) + floor0,
 ];
 Vctray = vround([62, Vtray.y, flayer(Htier/3)]);
@@ -716,6 +746,18 @@ assert(vfit(Vctray, Vctray0, "CITY-STATES TRAY"));
 module city_states_tray(color=undef) {
     vtray = Vctray;
     vcards = Vcdeck;
+    pcorner = [vtray.x/2-wall0, vtray.y/2-wall0];
+    pindent = [pcorner.x - vcards.x - 2*Rint, vcards.y + 2*Rint - pcorner.y];
+    vwell = [
+        [pcorner.x, pcorner.y],
+        [pindent.x, pcorner.y],
+        [pindent.x, pindent.y],
+        [-pcorner.x, pindent.y],
+        [-pcorner.x, -pcorner.y],
+        [-pindent.x, -pcorner.y],
+        [-pindent.x, -pindent.y],
+        [pcorner.x, -pindent.y],
+    ];
     ucards = [vcards.x, vcards.y];
     wcards = ucards + 2*[Rint, Rint];
     pcards = vtray/2 - wcards/2 - [wall0, wall0];
@@ -725,8 +767,9 @@ module city_states_tray(color=undef) {
     phex = [vtray.x/2-Rext-uhex.x, vtray.y/2-Rext-uhex.y];
     color(color) difference() {
         prism(vtray.z, [vtray.x, vtray.y], r=Rext);
-        raise() linear_extrude(vtray.z)
-        offset(r=-Rint) offset(r=2*Rint) for (i=[-1,+1]) translate(i*pcards) {
+        echo("FOO");
+        raise() prism(vtray.z, vwell, r=Rint);
+        for (i=[-1,+1]) translate(i*pcards) {
             square(ucards, center=true);
         }
         // use a bottom index hole only, smaller than the hex tile
@@ -841,10 +884,14 @@ module test_trays() {
 *map_tile_box();
 *map_tile_capitals();
 *map_tile_lid();
+*map_tile_plug();
+*map_hex_box();
+*map_hex_lid();
 *deck_box();
 *leaders_card_tray();
 *wonders_tray();
 *city_states_tray();
 
+*map_tile_stack(lift=3);
 *test_trays();
-organizer();  // bottom side
+organizer();
