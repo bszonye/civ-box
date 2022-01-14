@@ -262,12 +262,13 @@ Gbox = [
     [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
     [1, 5], [0.5, 4], [-0.5, 4], [-1, 3], [-2, 3],
     [-2.5, 2], [-2, 1], [-2.5, 0], [-2, -1], [-2.5, -2],
-    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -5],
-    [2, -5], [2.5, -4], [2, -3], [2.5, -2], [2, -1],
+    [-2, -3], [-1, -3], [-0.5, -4], [0.5, -4], [1, -3],
+    [2, -3], [2.5, -2], [2, -1],
 ];
 Ghole = [
-    [1.5, -4], [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
-    [0, -3], [0, -1], [0, 1], [0, 3], [-1.5, -2], [-1.5, 0], [-1.5, 2],
+    [1.5, -2], [1.5, 0], [1.5, 2], [1.5, 4],
+    [0, -3], [0, -1], [0, 1], [0, 3],
+    [-1.5, -2], [-1.5, 0], [-1.5, 2],
 ];
 Gplug = [ [1.5, -4], [1.5, 4], [-1.5, -2], [-1.5, 2], ];
 
@@ -283,7 +284,6 @@ function tier_room(z) = tier_ceil(z) - z;
 // reserved for focus bar storage.  the focus bars themselves sit to one side,
 // but the walls span the midline for stabilitiy.
 Rfloor = norm(Vfloor) / 2;  // major radius of box = 203.64mm
-Vquad = [200, 200];  // box quadrant area (center to corners)
 Vtray = [135, 85];  // small tray block
 // main tier heights: two thick layers + one thinner top layer
 Htier = 25;
@@ -511,9 +511,10 @@ function stack_height(v=[], plug=false, lid=false) =
     (lid ? sign(len(v))*clayer(Hseam) + Hlid : 0);  // lid above
 
 module hex_box(n=1, h=undef, grid=Ghex, r=Rhex, ghost=undef, color=undef) {
-    height = h ? h : hex_box_height(n=n);
+    height = h ? h : hex_box_height(n);
     hmin = hex_box_min_height(n);
     assert(hmin <= height);
+    echo(height=height, rec=hex_box_height(n), min=hex_box_min_height(n));
     color(color) difference() {
         // exterior
         prism(height, r1=Rint, r2=Rext)
@@ -549,7 +550,12 @@ module map_tile_box(n=Nmaps, h=undef, color=undef) {
     }
 }
 module map_tile_capitals(color=undef) {
-    map_tile_box(n=Nplayers, h=Htop, color=color);
+    // the 5 capital city tiles + the 5 forts
+    map_tile_box(n=Nplayers, color=color);
+}
+module map_tile_core_stack(color=undef) {
+    // the 16 map tiles for core + map stack
+    map_tile_box(n=Nmaps, h=40, color=color);
 }
 module map_tile_lid(color=undef) {
     color(color) difference() {
@@ -587,13 +593,12 @@ module map_hex_lid(color=undef) {
 module raise_lid(v=[], plug=false) {
     raise(stack_height(v, plug=plug, lid=true) - Hlid) children();
 }
-module map_tile_stack(plug=true, lift=0, color=undef) {
-    nmap = 16;
-    ncap = 5;
-    map_tile_box(nmap, color=color);
-    raise_lid([nmap+lift]) {
+module map_tile_tower(lift=Hseam, color=undef) {
+    // TODO: plugs and stuff
+    map_tile_core_stack(color=color);
+    raise_lid([Nmaps]) {
         map_tile_capitals(color=color);
-        raise(Htop+lift) map_tile_lid(color=color);
+        raise_lid([Nplayers]) map_tile_lid(color=color);
     }
 }
 
@@ -822,10 +827,10 @@ module organizer() {
     xstack = 10*Rhex*sin(60) + 2*Rext;
     ystack = 5*Rhex + 2*Rext;
     translate([Vfloor.x/2-xstack/2, ystack/2-Vfloor.y/2]) rotate(-90)
-        map_tile_stack(color=player_colors[0]);
+        map_tile_tower(color=player_colors[0]);
     // everything above the bar
     // TODO: distribute about 1mm space around this area
-    rotate(135) translate([0, Vquad.y - norm(Vfloor)/2]) {
+    translate([Vfloor.x/2-Vtray.x/2, Vfloor.y/2]) {
         // wonder trays
         for (j=[0:3])
             translate([(Vwtray.x-Vtray.x)/2, -Vwtray.y/2, j*(Vwtray.z+gap0)])
@@ -836,36 +841,13 @@ module organizer() {
             city_states_tray();
         // leader tray
         raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
-            translate([0, -Vltray.y/2-10])
+            translate([0, -Vltray.y/2])
             leaders_card_tray(color=player_colors[0]);
         // TODO: event dials
         // TODO: barbarian tokens
         // TODO: natural wonders & resource tokens
         // TODO: trade tokens
-        // TODO: turn this into a working player tray
-        x4 = Vtray.x + 2;
-        y4 = Vtray.y + 1;
-        x5 = 135;
-        // y5 = (y4 - x4/2) * cos(45)/(1-cos(45));
-        y5 = 90;  // this one fits, but it's uneven
-        // echo(x5=x5, y5=y5, y5-x5/2, cos(45) * (y4 + y5 - x4/2));
-        pentabox = [
-            [x5/2, y5],
-            [x5/2, x5/2],
-            [0, 0],
-            [-x5/2, x5/2],
-            [-x5/2, y5],
-        ];
-        points = [
-            [[x4/2+gap0, 0], -135, [1, 2]],
-            [[-(x4/2+gap0), 0], 135, [4, 5]],
-            [[0, -y4-y5], 0, [3, 0]],
-            // [[0, Vwtray.y+gap0 + y5], 0, 3],
-        ];
-        hbox = Htier - layer_height;
-        for (p=points) for (j=[0:1])
-            raise(j*(hbox+gap0)) translate(p[0]) rotate(p[1])
-            color(player_colors[p[2][j]]) prism(hbox, pentabox, r=Rext);
+        // TODO: player trays
     }
 }
 
@@ -887,9 +869,9 @@ module test_trays() {
 }
 
 *focus_frame();
-focus_frame(+1);
-focus_frame(-1);
-focus_frame(0);
+*focus_frame(+1);
+*focus_frame(-1);
+*focus_frame(0);
 *focus_frame(0, xspread=3);
 *raise(-floor0-gap0) focus_frame(0);
 *map_tile_box();
@@ -904,6 +886,6 @@ focus_frame(0);
 *city_states_tray();
 
 *map_hex_box(h=15);
-*map_tile_stack(lift=3);
+*map_tile_tower(lift=3);
 *test_trays();
-*organizer();
+organizer();
