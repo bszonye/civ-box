@@ -688,7 +688,7 @@ Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
 Vltray0 = card_tray_volume(Vleaders);
 Vltray = [Vtray.x, 110, 15];
 assert(vfit(Vltray, Vltray0, "LEADERS TRAY"));
-module leaders_card_tray(color=undef) {
+module leaders_tray(color=undef) {
     // TODO: expand this to exactly 135x110mm?
     card_tray(Vleaders, Vltray, color=color);
 }
@@ -826,29 +826,28 @@ module organizer() {
     // TODO: move stuff around
     xstack = 10*Rhex*sin(60) + 2*Rext;
     ystack = 5*Rhex + 2*Rext;
-    translate([Vfloor.x/2-xstack/2, ystack/2-Vfloor.y/2]) rotate(-90)
-        map_tile_tower(color=player_colors[0]);
+    translate([Vfloor.x/2-xstack/2+Rhex*sin(60), Vfloor.y/2-ystack/2])
+        rotate(90) map_tile_tower(color=player_colors[0]);
     // everything above the bar
     // TODO: distribute about 1mm space around this area
-    translate([Vfloor.x/2-Vtray.x/2, Vfloor.y/2]) {
+    translate([Vfloor.x/2-Vtray.x/2, -Vfloor.y/2]) {
         // wonder trays
         for (j=[0:3])
-            translate([(Vwtray.x-Vtray.x)/2, -Vwtray.y/2, j*(Vwtray.z+gap0)])
+            translate([(Vwtray.x-Vtray.x)/2, Vwtray.y/2, j*(Vwtray.z+gap0)])
                 wonders_tray();
         // city states
         for (j=[0:5])
-            translate([(Vtray.x-Vctray.x)/2, -Vctray.y/2, j*(Vctray.z+gap0)])
+            translate([(Vtray.x-Vctray.x)/2, Vctray.y/2, j*(Vctray.z+gap0)])
             city_states_tray();
         // leader tray
-        raise(2*(Vwtray.z+gap0) + 3*(Vctray.z+gap0))
-            translate([0, -Vltray.y/2])
-            leaders_card_tray(color=player_colors[0]);
-        // TODO: event dials
-        // TODO: barbarian tokens
-        // TODO: natural wonders & resource tokens
-        // TODO: trade tokens
-        // TODO: player trays
+        translate([0, -Vltray.y/2])
+        leaders_tray(color=player_colors[0]);
     }
+    // TODO: event dials
+    // TODO: barbarian tokens
+    // TODO: natural wonders & resource tokens
+    // TODO: trade tokens
+    // TODO: player trays
 }
 
 // tests for card trays
@@ -881,7 +880,7 @@ module test_trays() {
 *map_hex_box();
 *map_hex_lid();
 *deck_box();
-*leaders_card_tray();
+*leaders_tray();
 *wonders_tray();
 *city_states_tray();
 
