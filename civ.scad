@@ -75,6 +75,15 @@ function vtrace(title, vxmin, vsmin, vspec) =  // returns undef
 card = [2.5*inch, 3.5*inch];  // standard playing card dimensions
 playing_card = 0.35;  // common unsleeved card thickness (UG assumes 0.325)
 leader_card = 0.45;  // thickness of Civilization leader sheets
+// TODO: improve card & sleeve measurements
+// TODO: account for card float with & without sleeves
+// measured (tight-loose)
+// 7.0-7.5mm per 24 = 292-313 microns per card
+// 10.0-11.0mm per 24 with Sleeve Kings = 417-458 microns per card
+// note that the loose measurement has more float with sleeves on!
+echo(7.0/24, 7.3/24, 7.5/24, 3.0/24, 0.12*24);
+echo(10/24, 11/24);
+echo(458-125);
 
 // Gamegenic sleeves
 sand_sleeve = [81, 122];  // Dixit
@@ -96,13 +105,18 @@ super_large_sleeve = [104, 129];
 
 // sleeve thickness
 no_sleeve = 0;
-penny_sleeve = 0.08;  // 40 micron sleeves (Mayday)
-thick_sleeve = 0.12;  // 60 micron sleeves (Sleeve Kings)
-premium_sleeve = 0.2;  // 100 micron sleeves (Gamegenic)
-double_sleeve = 0.3;  // premium sleeve + inner sleeve
+md_standard = 0.08;  // 40 micron sleeves (Mayday standard)
+ug_classic = 0.08;  // 40 micron sleeves (Ultimate Guard classic)
+ug_premium = 0.10;  // 50 micron sleeves (Ultimate Guard premium soft)
+sk_standard = 0.125;  // 60 micron sleeves (Sleeve Kings standard)
+md_premium = 0.18;  // 90 micron sleeves (Mayday premium)
+gg_prime = 0.20;  // 100 micron sleeves (Gamegenic prime)
+sk_premium = 0.20;  // 100 micron sleeves (Sleeve Kings premium)
+ug_supreme = 0.23;  // 115 micron sleeves (Ultimate Guard supreme)
+double_sleeve = 0.30;  // 100 + 50 micron double sleeve
 
 function card_count(h, quality=no_sleeve, card=playing_card) =
-    floor(d / (card + quality));
+    floor(h / (card + quality));
 function vdeck(n=1, sleeve, quality, card=playing_card, wide=false) = [
     wide ? max(sleeve.x, sleeve.y) : min(sleeve.x, sleeve.y),
     wide ? min(sleeve.x, sleeve.y) : max(sleeve.x, sleeve.y),
@@ -250,13 +264,14 @@ Hcap = Hlid+Hplug;  // total height of lid + plug
 
 Rsnug = 0*gap0;  // snug joint radius for friction fit
 Rlid = 1*gap0;  // lid joint radius (dx from lid/plug to container wall)
-Rint = 1;  // internal corner radius (dx from contents to container wall)
-Rext = Rint+wall0;  // external corner radius
-Rtop = Rint+floor0;  // vertical corner radius (TODO: convert from Rext)
+// TODO: check on everything affected by Rext change
+Rext = 2.5;  // external corner radius
+Rint = Rext-wall0;  // internal corner radius (dx from contents to wall)
+Rtop = flayer(Rext);  // vertical corner radius
 Rxhole = Rhex1*sin(60) - Rint;  // smaller than a single-hex tile
 
 Hseam = gap0;  // space between lid cap and box (display only)
-Avee = 65;  // angle for index v-notches and lattices
+Avee = 60;  // angle for index v-notches and lattices
 Dthumb = 25;  // index hole diameter
 Gbox = [
     [2.5, 0], [2, 1], [2.5, 2], [2, 3], [2.5, 4], [2, 5],
@@ -384,8 +399,6 @@ module focus_bar(v, color=5) {
 }
 
 // TODO: switch to a flat 15mm tray
-Hshelf4 = Vfocus4.z + Rint;
-Hshelf5 = Vfocus5.z + Rext;
 Vfframe0 = [  // minimum size
     norm([Vinterior.x, Vinterior.y]),  // diagonal length
     2*max(Vfocus4.y, Vfocus5.y) + 3*wall0 + 2*Rint,
@@ -612,7 +625,7 @@ function card_tray_volume(v) = vround([
     v.z + Rtop + floor0]);
 
 // player focus decks: Gamegenic green sleeves
-Vdeck = vdeck(29, green_sleeve, premium_sleeve);
+Vdeck = vdeck(29, green_sleeve, gg_prime);
 Vdbox0 = deck_box_volume(Vdeck);
 Vdbox = vround([Vdbox0.x, 20, Vdbox0.z]);
 assert(vfit(Vdbox, Vdbox, "DECK BOX"));
@@ -684,7 +697,7 @@ module card_tray(deck, tray=undef, color=undef) {
 }
 
 // leader sheets: thick card with Sleeve Kings super large sleeve
-Vleaders = vdeck(18, super_large_sleeve, thick_sleeve, leader_card, wide=true);
+Vleaders = vdeck(18, super_large_sleeve, sk_standard, leader_card, wide=true);
 Vltray0 = card_tray_volume(Vleaders);
 Vltray = [Vtray.x, 110, 15];
 assert(vfit(Vltray, Vltray0, "LEADERS TRAY"));
@@ -713,7 +726,7 @@ module wonder_well(v, gap=gap0) {
         semistadium(dcut.y-dcut.x/2+gap, d=dcut.x);
 }
 
-Vwdeck = vdeck(9, yellow_sleeve, premium_sleeve, wide=true);
+Vwdeck = vdeck(9, yellow_sleeve, gg_prime, wide=true);
 Vwtray0 = [
     max(Vwdeck.x, 3*Vwonder.x + 2*Rint) + 2*Rext,
     Vwdeck.y + Rint + Vwonder.y + 3*Rext,
@@ -755,7 +768,7 @@ module wonders_tray(color=undef) {
 }
 
 Dcbanner = 12;  // width of the title banner on city-state cards
-Vcdeck = vdeck(4, yellow_sleeve, premium_sleeve);
+Vcdeck = vdeck(4, yellow_sleeve, gg_prime);
 Vctray0 = [  // minimum size to stagger two cards with both titles visible
     Vcdeck.x + Dcbanner + 2*Rext,
     Vcdeck.y + Dcbanner + 2*Rext,
@@ -852,10 +865,10 @@ module organizer() {
 
 // tests for card trays
 module test_trays() {
-    vgreen1 = vdeck(18, green_sleeve, premium_sleeve, wide=false);
-    vgreen2 = vdeck(18, green_sleeve, premium_sleeve, wide=true);
-    vyellow1 = vdeck(18, yellow_sleeve, premium_sleeve, wide=false);
-    vyellow2 = vdeck(18, yellow_sleeve, premium_sleeve, wide=true);
+    vgreen1 = vdeck(18, green_sleeve, gg_prime, wide=false);
+    vgreen2 = vdeck(18, green_sleeve, gg_prime, wide=true);
+    vyellow1 = vdeck(18, yellow_sleeve, gg_prime, wide=false);
+    vyellow2 = vdeck(18, yellow_sleeve, gg_prime, wide=true);
     card_tray(Vleaders);
     translate([90+vgreen1.x/2, 0]) card_tray(vgreen1);
     translate([0, 75+vgreen2.y/2]) card_tray(vgreen2);
@@ -886,5 +899,5 @@ module test_trays() {
 
 *map_hex_box(h=15);
 *map_tile_tower(lift=3);
-*test_trays();
-organizer();
+test_trays();
+*organizer();
