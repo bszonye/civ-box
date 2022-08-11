@@ -634,7 +634,7 @@ module deck_box(v=Vdeck, color=undef) {
     well = vbox - 2*[wall0, wall0];
     // notch dimensions:
     hvee = qlayer(vbox.z/2);  // half the height of the box
-    dvee = 2*hvee*cos(Avee);  // point of the vee exactly at the base
+    dvee = 2*hvee/tan(Avee);  // point of the vee exactly at the base
     vee = [dvee, vbox.y, vbox.z-hvee];
     color(color) difference() {
         linear_extrude(vbox.z)
